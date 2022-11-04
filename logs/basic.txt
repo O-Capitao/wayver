@@ -1,0 +1,14 @@
+[2022-11-04 20:58:11.602] [basic_logger] [info] Some log message
+[2022-11-04 21:01:05.747] [basic_logger] [info] Some log message
+[2022-11-04 21:11:25.235] [basic_logger] [info] WAYVER - LOG
+*****************
+
+
+[2022-11-04 21:12:26.432] [basic_logger] [info] WAYVER - LOG
+*****************
+
+
+[2022-11-04 21:12:26.433] [basic_logger] [debug] Opening ss
+[2022-11-04 21:13:37.219] [logger] [info] Starting WAYVER
+
+[2022-11-04 21:13:37.219] [logger] [debug] Opening ss
