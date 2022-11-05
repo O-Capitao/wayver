@@ -12,6 +12,9 @@
 #include <complex>
 #include <fftw3.h>
 
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/basic_file_sink.h"
+
 // about FFTs:
 // https://www.dataq.com/data-acquisition/general-education-tutorials/fft-fast-fourier-transform-waveform-analysis.html
 namespace Wayver {
@@ -121,6 +124,8 @@ namespace Wayver {
 
             void _unloadFile();
 
+            std::shared_ptr<spdlog::logger> _logger;
+
             static int _paStreamCallback( 
                 const void *inputBuffer,
                 void *outputBuffer,
@@ -143,8 +148,7 @@ namespace Wayver {
         public:
 
             AudioEngine(
-                int samplesInBuffer = 512,
-                int dftBandsCount = 100
+                int samplesInBuffer = 512
             );
 
             ~AudioEngine();

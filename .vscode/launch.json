@@ -11,7 +11,11 @@
             "name": "Debug",
             // "pid": "6799",
             "program": "${workspaceFolder}/wayver.a",
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "-f",
+                "./track.wav"
+            ],
         }
     ]
 }

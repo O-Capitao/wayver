@@ -21,22 +21,46 @@ AudioFile::~AudioFile(){
     printf("EXIT InternalAudioData::~InternalAudioData()\n");
 }
 
+
+std::string arrayToString(float *arr, int len){
+    std::string retval = "";
+    for (int i=0;i<len;i++){
+
+        retval += std::to_string(i) + ": ";
+        retval += std::to_string(arr[i]);
+
+        if (i != len - 1 ){
+            retval += "; ";
+        }
+
+    }
+
+    return retval;
+}
+
+
 AudioEngine::AudioEngine( 
-    int samplesInBuffer,
-    int dftBandsCount 
+    int samplesInBuffer
 ){
 
     assert( samplesInBuffer % 2 == 0);
-
-    _calc_windowFunction();
-
+    //init logging
+    _logger = spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log");
+    // _logger = spdlog::get("MAIN");
+    _logger->debug( "Starting AudioEngine.\nSAMPLES IN BUFFER={}.", samplesInBuffer );
+    
     _samplesInBuffer = samplesInBuffer;
-    _dftBandsCount = dftBandsCount;
+    _dftBandsCount = samplesInBuffer;
 
     _fft_result_arr = new fftwf_complex[ _samplesInBuffer ];
     _windowFunctionPoints_arr = new float[ _samplesInBuffer ];
     _dft_Output_Freqs_arr = new float[ _samplesInBuffer / 2 ];
     _band_intensities_arr = new float[ _dftBandsCount ];
+
+    _calc_windowFunction();
+
+    _logger->info( "Finished calculating window function:\n{}", arrayToString(_windowFunctionPoints_arr, _samplesInBuffer) );
+    _logger->flush();
 }
 
 AudioEngine::~AudioEngine(){
