@@ -40,16 +40,7 @@ int main(int argc, char *argv[])
     Wayver::AudioEngine engine( 128 );
     engine.loadFile(path.c_str());
     engine.playFile();
-
-    // start event loop
-    char c = 'x'; // get rid of warning
-
-    while (c != 'Q'){
-        std::cin >> c;
-        boost::this_thread::sleep(boost::posix_time::millisec(100));  
-    }
-
-    engine.pauseFile();
+    //block until finished
     engine.closeFile();
 
 

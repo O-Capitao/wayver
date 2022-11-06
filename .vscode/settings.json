@@ -98,5 +98,6 @@
         "shared_mutex": "cpp",
         "span": "cpp"
     },
-    "C_Cpp.errorSquiggles": "Enabled"
+    "C_Cpp.errorSquiggles": "Enabled",
+    "workbench.colorTheme": "Darcula"
 }

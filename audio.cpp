@@ -192,21 +192,22 @@ void AudioEngine::playFile(){
         Pa_Sleep(100);
     }
 
-    closeFile();
+    // closeFile();
 }
 
-void AudioEngine::pauseFile(){
-    if (PLAYING){
-        PaError err = Pa_CloseStream( stream );
+// void AudioEngine::pauseFile(){
+//     if (PLAYING){
+//         PaError err = Pa_CloseStream( stream );
 
-        if (err != paNoError){
-            throw std::runtime_error("Error Stopping stream\n");
-        }
-    }
-}
+//         if (err != paNoError){
+//             throw std::runtime_error("Error Stopping stream\n");
+//         }
+//     }
+// }
 
 void AudioEngine::closeFile()
-{
+{   
+    _logger->info("Closing File");
     
     PaError err;
 

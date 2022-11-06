@@ -14,8 +14,9 @@
             "cwd": "${workspaceFolder}",
             "args": [
                 "-f",
-                "./track.wav"
+                "./a4.wav"
             ],
+            "externalConsole":true
         }
     ]
 }
