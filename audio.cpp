@@ -5,20 +5,17 @@
 
 using namespace Wayver;
 
-AudioFile::AudioFile(int bs, const std::string &p){
+InternalAudioData::InternalAudioData(int bs, const std::string &p){
     
-    buffer_size = bs;
-    filePath = p;
-
+    frames_in_buffer = bs;
     file = sf_open( p.c_str(), SFM_READ, &info);
-    dft_in = new float[buffer_size * info.channels];
+    buffer_copy_arr = new float[ frames_in_buffer * info.channels ];
 
 
 }
 
-AudioFile::~AudioFile(){
-    delete[] dft_in;
-    printf("EXIT InternalAudioData::~InternalAudioData()\n");
+InternalAudioData::~InternalAudioData(){
+    delete[] buffer_copy_arr;
 }
 
 
@@ -32,80 +29,34 @@ std::string arrayToString(float *arr, int len){
         if (i != len - 1 ){
             retval += "; ";
         }
-
     }
-
     return retval;
 }
 
 
-AudioEngine::AudioEngine( 
-    int samplesInBuffer
-){
+AudioEngine::AudioEngine( int bs ){
 
-    assert( samplesInBuffer % 2 == 0);
     //init logging
     _logger = spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log");
-    // _logger = spdlog::get("MAIN");
-    _logger->debug( "Starting AudioEngine.\nSAMPLES IN BUFFER={}.", samplesInBuffer );
+    _logger->debug( "Starting AudioEngine.\nSAMPLES IN BUFFER={}.", bs );
     
-    _samplesInBuffer = samplesInBuffer;
-    _dftBandsCount = samplesInBuffer;
-
-    _fft_result_arr = new fftwf_complex[ _samplesInBuffer ];
-    _windowFunctionPoints_arr = new float[ _samplesInBuffer ];
-    _dft_Output_Freqs_arr = new float[ _samplesInBuffer / 2 ];
-    _band_intensities_arr = new float[ _dftBandsCount ];
-
-    _calc_windowFunction();
-
-    _logger->info( "Finished calculating window function:\n{}", arrayToString(_windowFunctionPoints_arr, _samplesInBuffer) );
-    _logger->flush();
+    _frames_in_buffer = bs;
 }
 
 AudioEngine::~AudioEngine(){
-
-    delete[] _fft_result_arr;
-    delete[] _band_intensities_arr;
-    delete[] _fft_aux_values_arr;
-    delete[] _windowFunctionPoints_arr;
-    delete[] _dft_Output_Freqs_arr;
-
-    _unloadFile();
-
-    printf("EXIT AudioEngine::~AudioEngine()\n");
+    delete _data;
 }
 
 
 void AudioEngine::loadFile( const std::string& path){
+
     if (_data != NULL){
-        _unloadFile();
+        closeFile();
+        delete _data;
     }
 
-    _data = new AudioFile( _samplesInBuffer, path );
-    
-    _fft_aux_values_arr = new float[  _data->info.channels * _samplesInBuffer ];
-
-    _fft_plan = fftwf_plan_dft_r2c_1d(
-        _samplesInBuffer, 
-        _fft_aux_values_arr, 
-        _fft_result_arr, 
-        FFTW_MEASURE
-    );
-
-    _calc_DFT_OutputFreqs();
+    _data = new InternalAudioData( _frames_in_buffer, path );
 }
-
-void AudioEngine::_unloadFile(){
-
-    if (_data == NULL) return;
-
-    sf_close(_data->file);
-
-    delete _data;
-    _data = NULL;
-
-}   
 
 int AudioEngine::_paStreamCallback(
     const void *input
@@ -116,17 +67,13 @@ int AudioEngine::_paStreamCallback(
     ,void *userData
 ){
 
-    // if (QUIT){
-    //     return paComplete;
-    // }
-
     float *out;
-    AudioFile *p_data = (AudioFile*)userData;
+    InternalAudioData *p_data = (InternalAudioData*)userData;
 
     sf_count_t num_read;
 
     out = (float*)output;
-    p_data = (AudioFile*)userData;
+    p_data = (InternalAudioData*)userData;
 
     /* clear output buffer */
     memset(out, 0, sizeof(float) * frameCount * p_data->info.channels);
@@ -134,7 +81,7 @@ int AudioEngine::_paStreamCallback(
     /* read directly into output buffer */
     num_read = sf_read_float(p_data->file, out, frameCount * p_data->info.channels);
     
-    _copyArray( out, p_data->dft_in, p_data->buffer_size * p_data->info.channels );
+    memcpy( p_data->buffer_copy_arr, out,  p_data->frames_in_buffer * p_data->info.channels );
     
     /*  If we couldn't read a full frameCount of samples we've reached EOF */
     if (num_read < frameCount)
@@ -167,7 +114,7 @@ void AudioEngine::playFile(){
         _data->info.channels,
         paFloat32,
         _data->info.samplerate,
-        _samplesInBuffer,
+        _frames_in_buffer,
         _paStreamCallback,
         _data
     );
@@ -182,28 +129,14 @@ void AudioEngine::playFile(){
     if (err != paNoError){
         throw std::runtime_error("Error starting Stream\n");
     }
-    PLAYING = true;
-
   
-
     /* Run until EOF is reached */
     while(Pa_IsStreamActive(stream))
     {
         Pa_Sleep(100);
     }
 
-    // closeFile();
 }
-
-// void AudioEngine::pauseFile(){
-//     if (PLAYING){
-//         PaError err = Pa_CloseStream( stream );
-
-//         if (err != paNoError){
-//             throw std::runtime_error("Error Stopping stream\n");
-//         }
-//     }
-// }
 
 void AudioEngine::closeFile()
 {   
@@ -211,7 +144,6 @@ void AudioEngine::closeFile()
     
     PaError err;
 
-    PLAYING = false;
     /* Close the soundfile */
     sf_close(_data->file);
 
@@ -229,103 +161,5 @@ void AudioEngine::closeFile()
     }
 }
 
-void AudioEngine::_calc_windowFunction(){
-
-    for (int i = 0; i < _samplesInBuffer; i++){
-
-        _windowFunctionPoints_arr[i] = pow( sin( M_PI * i / (_samplesInBuffer - 1) ), 2);
-
-    }
-
-}
-
-void AudioEngine::_calc_DFT_OutputFreqs(){
-
-    assert( _data->file != NULL );
-
-    float k = 0;
-    float sr = (float)_data->info.samplerate;
-    float fpb = (float)_samplesInBuffer;
-
-    for (int i = 0; i < _samplesInBuffer / 2; i++){
-        k = (float)i;
-        _dft_Output_Freqs_arr[i] = ( k * sr ) / fpb;
-    }
-
-
-}
-
-void AudioEngine::_copyArray(float *src, float *tgt, int l){
-    for (int i = 0; i < l; i++){
-        tgt[i] = src[i];
-    }
-}
-
-void AudioEngine::_copyChannelWithWindowing( float *src, float *tgt, float *window, int total_l, int channel ){
-
-    assert( total_l % 2 == 0);
-    
-    int n_samples = total_l / 2;
-
-    for (int i = 0; i < n_samples; i++){
-        tgt[i] = src[2 * i + channel] * window[i];
-    }
-}
-
-void AudioEngine::_reduceDFTDataToBands( float *src, float *tgt, int n_samnples_src, int n_samples_tgt ){
-
-}
-
-
-
-const ExternalAudioData AudioEngine::generateExternalAudioData(){
-
-    _copyChannelWithWindowing(
-        _data->dft_in, _fft_aux_values_arr, 
-        _windowFunctionPoints_arr,
-        _samplesInBuffer * _data->info.channels, 
-        0 
-    );
-
-    fftwf_execute( _fft_plan );
-
-    float aux[_samplesInBuffer / 2];
-    // float max = 0;
-
-    // transform fft complex output into integer 0 - 10
-    for (int i = 0; i < _samplesInBuffer / 2; i++){
-        aux[i] = sqrt( pow(_fft_result_arr[i][0],2) + pow(_fft_result_arr[i][1], 2) );
-        // max = (aux[i]> max) ? aux[i] : max;
-    };
-
-    for (int i = 0; i < _dftBandsCount; i++){
-        _band_intensities_arr[i] = 0;
-    }
-
-    return {
-        .filename = "dummy",
-        .channels = _data->info.channels,
-        .sample_rate = _data->info.samplerate,
-        .bands = _band_intensities_arr,
-        .n_bands_exported = _dftBandsCount
-    };
-}
-
-
-
-std::string ExternalAudioData::stringify(){
-
-    assert( n_bands_exported != 0);
-
-    std::string retval = "BANDS:\n";
-
-    for (int i = 0; i < n_bands_exported ; i++){
-        retval.append(std::to_string( bands[i] ) + " ");
-    }
-
-    retval +="\n";
-
-    return retval;
-}
 
 

@@ -38,4 +38,11 @@ Quero uma aleração quando a app arranca para
 +------------------------------------------------------------------------------+
 ```
 
-### Start
+## Thread Audio vs Thread UI
+
+    Thread Audio                             Thread UI
+        |_paCallback()
+
+
+
+An audio buffer is a collection of sample frames. A sample frame is a set of audio samples that are coincident in time.

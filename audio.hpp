@@ -19,113 +19,45 @@
 // https://www.dataq.com/data-acquisition/general-education-tutorials/fft-fast-fourier-transform-waveform-analysis.html
 namespace Wayver {
     
-    // PortAudio Callback
-    // User obj
-    struct AudioFile {
+    /***
+     * Object that is passed to paCallback,
+     * used to exchange data between Audio Thread
+     * and outside world
+    */
+    struct InternalAudioData {
 
-        AudioFile(int bufferSize, const std::string &file_path);
-        ~AudioFile();
+        InternalAudioData(int _frames_in_buffer, const std::string &path);
+        ~InternalAudioData();
 
         SNDFILE* file = NULL;
         SF_INFO  info;
-        
-        int buffer_size;
-        std::string filePath;
+        std::string file_path;
 
         int readHead = 0;
         int count = 1;
         
-        // copy of each buffer, used for output
-        float *dft_in = NULL;
+        // copy frames in bufer - used for output
+        int frames_in_buffer;
+        float *buffer_copy_arr = NULL;
 
     };
 
-
-    // for outbound communication
-    // from the engine to some client
-    struct ExternalAudioData {
-
-        std::string filename;
-        int channels;
-        int sample_rate;
-
-        int n_bands_exported = 0;
-        float *bands;
-
-        std::string stringify();
-    };
-    struct SpectrumSliceBand{
-        float log10_freq;
-        float freq;
-        float amp_pcm;
-        float amp_db;
-    };
-
-    struct SpectrumSlice{
-        
-        SpectrumSlice(
-            int n_bands,
-            float *input_amps,
-            float *input_freqs,
-            int input_size,
-            float amp_zero,
-            bool useLogScale = true );
-
-        
-
-        private:
-            
-            
-            std::vector<SpectrumSliceBand> _bands;
-
-            int _n_bands;
-
-            int input_size;
-            float *in_freq_array;
-            float *in_amp_array;
-
-            static int _findBeforeFreqIndex( 
-                float *freq_array, 
-                int array_size, 
-                float freq,
-                int start_cursor = 0);
-
-            static float _calcInterpolatedValueForFrequency( 
-                float freq_to_get,
-                int array_size, 
-                float *freq_array,
-                float *amp_array );
-
-            static float _calcAmp_DbFullRange( float sample_value );
-    };
-
-    /*
-    Class for handling basic audio functions
+    /***
+     * Wraps around the paCallback
+     * 
+     *      - Handles the File, Stream and holds copies of 
+     *      Audio Data for outside world as well as accessors
     */
     class AudioEngine {
 
         private:
             
-            int _samplesInBuffer;
-            int _dftBandsCount;
-
-            AudioFile* _data = NULL;
+            InternalAudioData* _data = NULL;
             PaStream *stream;
-
-            fftwf_plan _fft_plan;
-
-            fftwf_complex *_fft_result_arr;
-            float *_band_intensities_arr;
-            float *_fft_aux_values_arr;
-            float *_windowFunctionPoints_arr;
-            float *_dft_Output_Freqs_arr;
-
-            bool PLAYING = false;
-
-            void _unloadFile();
-
             std::shared_ptr<spdlog::logger> _logger;
+            int _frames_in_buffer;
 
+            
             static int _paStreamCallback( 
                 const void *inputBuffer,
                 void *outputBuffer,
@@ -134,35 +66,17 @@ namespace Wayver {
                 PaStreamCallbackFlags statusFlags,
                 void *userData
             );
-
-            // https://en.wikipedia.org/wiki/Hann_function
-            void _calc_windowFunction();
-            void _calc_DFT_OutputFreqs();
-            
-
-            static void _reduceDFTDataToBands( float *src, float *tgt, int n_samnples_src, int n_samples_tgt );
-            // static void _multiplyArrays(double *arr1, double*arr2, double *out, int l);
-            static void _copyArray(float *src, float *tgt, int l);
-            static void _copyChannelWithWindowing( float *src, float *tgt, float *window, int total_l, int channel );
-
         public:
 
-            AudioEngine(
-                int samplesInBuffer = 512
-            );
-
+            AudioEngine( int nFramesInBuffer );
             ~AudioEngine();
 
             // Player Actions
             void loadFile(const std::string& path);
+            void closeFile(); 
+
+            // Audio Thread
             void playFile();
-            void pauseFile();
-            void closeFile();
-
-            // Data access
-            // const SoundFileInfo &getSoundFileInfo();
-            const ExternalAudioData generateExternalAudioData();
-            void getFrqDomainData();
-
+            void pauseFile();           
     };
 }

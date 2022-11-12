@@ -39,8 +39,14 @@ int main(int argc, char *argv[])
 
     Wayver::AudioEngine engine( 128 );
     engine.loadFile(path.c_str());
-    engine.playFile();
+    
+    // start audio thread
+    boost::thread playT{boost::bind(&Wayver::AudioEngine::playFile, &engine)};
+    
+
+
     //block until finished
+    playT.join();
     engine.closeFile();
 
 
