@@ -8,17 +8,14 @@
 
 using namespace Wayver;
 
-void WayverUi::init(  
-    // WayverQueue *ifa,
-    int f_fpb,
+void WayverUi::init(
     int n_c,
-    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>> *rdptr
+    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *rdptr
 ){
     _logger = spdlog::basic_logger_mt("UI", "wayver.log");
     // this->_input_from_audio = ifa;
     
     this->_n_channels = n_c;
-    this->_n_frames_per_buffer = f_fpb;
     this->_n_samples_in = _n_channels * _n_frames_per_buffer;
     this->_samples_in_vec.reserve( _n_samples_in );
     this->_rawDataTap_ptr = rdptr;
@@ -29,6 +26,8 @@ void WayverUi::init(
 
 void WayverUi::run(){
     _logger->debug("Starting run()");
+
+    // Aquire data from queue.
     while (!_stop)
     {
         float fliflu;

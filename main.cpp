@@ -10,20 +10,11 @@
 #include "audio.hpp"
 #include "wayver-ui.hpp"
 
-
-
-
-
 /***
  * Main Fn Headers
 */
 std::shared_ptr<spdlog::logger> initLogging();
 void printHelp();
-
-bool QUIT = false;
-// void dummyUiThread( Wayver::WayverQueue *q );
-const uint16_t N_FRAMES_PER_BUFFER = 128;
-
 
 
 /****
@@ -49,12 +40,10 @@ int main(int argc, char *argv[])
     logger->debug("Opening {}", path);
 
     // init the QUEUE
-    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>> *queue_audio_to_ui = 
-        new boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>>();
+    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *queue_audio_to_ui = 
+        new boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>>();
 
-    Wayver::AudioEngine engine( 
-        N_FRAMES_PER_BUFFER
-    );
+    Wayver::AudioEngine engine;
 
     engine.loadFile(path.c_str());
     SF_INFO sound_file_info = engine.getSoundFileInfo();
@@ -66,7 +55,6 @@ int main(int argc, char *argv[])
     Wayver::WayverUi ui;
 
     ui.init(
-        N_FRAMES_PER_BUFFER,
         N_CHANNELS,
         queue_audio_to_ui
     );

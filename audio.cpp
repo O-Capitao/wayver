@@ -6,10 +6,8 @@
 using namespace Wayver;
 
 InternalAudioData::InternalAudioData(
-    int bs, 
     const std::string &p
-):frames_in_buffer(bs),
-file(sf_open( p.c_str(), SFM_READ, &info))
+):file(sf_open( p.c_str(), SFM_READ, &info))
 {}
 
 InternalAudioData::~InternalAudioData(){
@@ -32,13 +30,11 @@ std::string arrayToString(float *arr, int len){
 }
 
 
-AudioEngine::AudioEngine( int bs ){
+AudioEngine::AudioEngine(){
 
     //init logging
     _logger = spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log");
-    _logger->debug( "Constructed", bs );
-    
-    _frames_in_buffer = bs;
+    _logger->debug( "Constructed" );
 }
 
 AudioEngine::~AudioEngine(){
@@ -55,7 +51,7 @@ void AudioEngine::loadFile( const std::string& path){
         delete _data;
     }
 
-    _data = new InternalAudioData( _frames_in_buffer, path );
+    _data = new InternalAudioData( path );
 }
 
 int AudioEngine::_paStreamCallback(
@@ -85,25 +81,28 @@ int AudioEngine::_paStreamCallback(
     int pushedItems;
 
     // push read values into queue
-    for (int i = 0; i < frameCount * p_data->info.channels; i++)
-    {
-        val = out[i];
-        pushedItems = p_data->_rawDataTap_ptr->read_available();
+    if (p_data->_rawDataTap_ptr->read_available() == 0){
+        for (int i = 0; i < frameCount * p_data->info.channels; i++)
+        {
+            val = out[i];
+            pushedItems = p_data->_rawDataTap_ptr->read_available();
 
-        if (pushedItems == p_data->_rawDataTap_Capacity){
-            p_data->_rawDataTap_ptr->pop();
+            if (pushedItems == W_QUEUE_SIZE){
+                p_data->_rawDataTap_ptr->pop();
+            }
+
+            if (!p_data->_rawDataTap_ptr->push( val )){
+
+                int writespace = p_data->_rawDataTap_ptr->write_available();
+                printf("Failed to push value %f into position %d.\n", val, i);
+                printf("Queue already had %d items. And can take %d.\n", pushedItems, writespace );
+                return paAbort;
+            
+            }
+
         }
-
-        if (!p_data->_rawDataTap_ptr->push( val )){
-
-            int writespace = p_data->_rawDataTap_ptr->write_available();
-            printf("Failed to push value %f into position %d.\n", val, i);
-            printf("Queue already had %d items. And can take %d.\n", pushedItems, writespace );
-            return paAbort;
-        
-        }
-
     }
+    
     
     /*  If we couldn't read a full frameCount of samples we've reached EOF */
     if (num_read < frameCount)
@@ -135,7 +134,7 @@ void AudioEngine::run(){
         _data->info.channels,
         paFloat32,
         _data->info.samplerate,
-        _frames_in_buffer,
+        FRAMES_IN_BUFFER,
         _paStreamCallback,
         _data
     );
@@ -189,12 +188,12 @@ const SF_INFO &AudioEngine::getSoundFileInfo(){
     return _data->info;
 }
 
-boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>> *AudioEngine::getRawDataTap_ptr(){
+boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *AudioEngine::getRawDataTap_ptr(){
     return _data->_rawDataTap_ptr;
 }
 
 void AudioEngine::setAudioToUiQueue( 
-    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>> *queue_ptr 
+    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *queue_ptr 
 ){
     _data->_rawDataTap_ptr = queue_ptr;
 }
