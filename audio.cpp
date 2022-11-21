@@ -5,17 +5,15 @@
 
 using namespace Wayver;
 
-InternalAudioData::InternalAudioData(int bs, const std::string &p){
-    
-    frames_in_buffer = bs;
-    file = sf_open( p.c_str(), SFM_READ, &info);
-    buffer_copy_arr = new float[ frames_in_buffer * info.channels ];
-
-
-}
+InternalAudioData::InternalAudioData(
+    int bs, 
+    const std::string &p
+):frames_in_buffer(bs),
+file(sf_open( p.c_str(), SFM_READ, &info))
+{}
 
 InternalAudioData::~InternalAudioData(){
-    delete[] buffer_copy_arr;
+    delete _rawDataTap_ptr;    
 }
 
 
@@ -38,7 +36,7 @@ AudioEngine::AudioEngine( int bs ){
 
     //init logging
     _logger = spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log");
-    _logger->debug( "Starting AudioEngine.\nSAMPLES IN BUFFER={}.", bs );
+    _logger->debug( "Constructed", bs );
     
     _frames_in_buffer = bs;
 }
@@ -49,6 +47,8 @@ AudioEngine::~AudioEngine(){
 
 
 void AudioEngine::loadFile( const std::string& path){
+
+    _logger->debug("loadFile()");
 
     if (_data != NULL){
         closeFile();
@@ -73,6 +73,7 @@ int AudioEngine::_paStreamCallback(
     sf_count_t num_read;
 
     out = (float*)output;
+
     p_data = (InternalAudioData*)userData;
 
     /* clear output buffer */
@@ -80,8 +81,29 @@ int AudioEngine::_paStreamCallback(
 
     /* read directly into output buffer */
     num_read = sf_read_float(p_data->file, out, frameCount * p_data->info.channels);
-    
-    memcpy( p_data->buffer_copy_arr, out,  p_data->frames_in_buffer * p_data->info.channels );
+    float val;
+    int pushedItems;
+
+    // push read values into queue
+    for (int i = 0; i < frameCount * p_data->info.channels; i++)
+    {
+        val = out[i];
+        pushedItems = p_data->_rawDataTap_ptr->read_available();
+
+        if (pushedItems == p_data->_rawDataTap_Capacity){
+            p_data->_rawDataTap_ptr->pop();
+        }
+
+        if (!p_data->_rawDataTap_ptr->push( val )){
+
+            int writespace = p_data->_rawDataTap_ptr->write_available();
+            printf("Failed to push value %f into position %d.\n", val, i);
+            printf("Queue already had %d items. And can take %d.\n", pushedItems, writespace );
+            return paAbort;
+        
+        }
+
+    }
     
     /*  If we couldn't read a full frameCount of samples we've reached EOF */
     if (num_read < frameCount)
@@ -93,18 +115,17 @@ int AudioEngine::_paStreamCallback(
 }
 
 // https://github.com/hosackm/wavplayer/blob/master/src/wavplay.c
-void AudioEngine::playFile(){
-    
+void AudioEngine::run(){
+
+    _logger->debug("Starting playFile()");
     PaError err = Pa_Initialize();
 
     if (err != paNoError){
-        // fprintf( stderr, "Couldn't init the portaudio library!\n" );
         throw std::runtime_error("Error initing the AudioEngine");
     }
 
     if ( _data == NULL ){
         err = Pa_Terminate();
-
         throw std::runtime_error("No data to play, shutting down.\n");
     }
 
@@ -136,6 +157,8 @@ void AudioEngine::playFile(){
         Pa_Sleep(100);
     }
 
+    closeFile();
+
 }
 
 void AudioEngine::closeFile()
@@ -162,4 +185,16 @@ void AudioEngine::closeFile()
 }
 
 
+const SF_INFO &AudioEngine::getSoundFileInfo(){
+    return _data->info;
+}
 
+boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>> *AudioEngine::getRawDataTap_ptr(){
+    return _data->_rawDataTap_ptr;
+}
+
+void AudioEngine::setAudioToUiQueue( 
+    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>> *queue_ptr 
+){
+    _data->_rawDataTap_ptr = queue_ptr;
+}
