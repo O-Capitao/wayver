@@ -54,20 +54,21 @@ int main(int argc, char *argv[])
 
     Wayver::WayverUi ui;
 
-    ui.init(
+    ui.initUiState(
         N_CHANNELS,
         queue_audio_to_ui
     );
+    ui.initWindow();
 
     // start audio thread
     boost::thread playT{boost::bind(&Wayver::AudioEngine::run, &engine)};
-    boost::thread uiT{boost::bind(&Wayver::WayverUi::run, &ui)};
+    
+    ui.run();
     
     // block until finished
-    // player thread exits first;
     playT.join();
     ui.stop();
-    uiT.join();
+    // uiT.join();
     
     logger->debug("Joined threads");
 

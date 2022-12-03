@@ -96,8 +96,9 @@
         "charconv": "cpp",
         "format": "cpp",
         "shared_mutex": "cpp",
-        "span": "cpp"
+        "span": "cpp",
+        "*.ipp": "cpp"
     },
     "C_Cpp.errorSquiggles": "Enabled",
-    "workbench.colorTheme": "Darcula"
+    "workbench.colorTheme": "1337"
 }

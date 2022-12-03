@@ -1,5 +1,7 @@
 #pragma once
 
+#include "wayver-defines.hpp"
+
 #include "portaudio.h"
 #include "sndfile.hh"
 #include <string>
@@ -28,7 +30,6 @@ namespace Wayver {
     struct InternalAudioData {
 
         InternalAudioData(
-            int _frames_in_buffer, 
             const std::string &path
         );
 
@@ -40,10 +41,8 @@ namespace Wayver {
 
         int readHead = 0;
         int count = 1;
-        
-        int frames_in_buffer;
 
-        boost::lockfree::spsc_queue<float, boost::lockfree::capacity<1000>> *_rawDataTap_ptr;
+        boost::lockfree::spsc_queue<float, boost::lockfree::capacity<W_QUEUE_SIZE>> *_rawDataTap_ptr;
     };
 
     /***
@@ -59,8 +58,6 @@ namespace Wayver {
             InternalAudioData* _data = NULL;
             PaStream *stream;
             std::shared_ptr<spdlog::logger> _logger;
-            int _frames_in_buffer;
-
 
             static int _paStreamCallback( 
                 const void *inputBuffer,
@@ -72,9 +69,7 @@ namespace Wayver {
             );
         public:
 
-            AudioEngine( 
-                int nFramesInBuffer
-            );
+            AudioEngine();
             
             ~AudioEngine();
 
@@ -82,7 +77,7 @@ namespace Wayver {
             void loadFile(const std::string& path);
 
             void setAudioToUiQueue( 
-                boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>> *queue_ptr 
+                boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *queue_ptr 
             );
 
             void closeFile(); 
@@ -91,7 +86,7 @@ namespace Wayver {
             void run();
             void pauseFile();
 
-            boost::lockfree::spsc_queue<float,boost::lockfree::capacity<1000>>  *getRawDataTap_ptr();
+            boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>>  *getRawDataTap_ptr();
 
             const SF_INFO &getSoundFileInfo();    
     };

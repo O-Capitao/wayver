@@ -34,7 +34,7 @@ Quero uma aleração quando a app arranca para
 |                         |                                                    |
 |                         |                                                    |
 +------------------------------------------------------------------------------+
-|                                    [Q]uit [L]oad [P]lay/[P]ause              |
+|                                    [Q]uit [L]oad [P]lay/[P]ause              |h
 +------------------------------------------------------------------------------+
 ```
 
@@ -46,3 +46,23 @@ Quero uma aleração quando a app arranca para
 
 
 An audio buffer is a collection of sample frames. A sample frame is a set of audio samples that are coincident in time.
+
+
+
+
+
+
+# Threads:
+
+## Audio Thread
+
+## UI Thread
+
+
+
+## Queue
+    - no wait -> spsc queue
+    - 
+```c
+    #include <boost/lockfree/queue.hpp>
+```
