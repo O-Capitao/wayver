@@ -1,9 +1,11 @@
-#include "audio.hpp"
+#include <wayver-audio.hpp>
 #include <string>
-#include  <filesystem>
+#include <filesystem>
 #include <math.h>
 
-using namespace Wayver;
+using namespace Wayver::Audio;
+
+
 
 InternalAudioData::InternalAudioData(
     const std::string &p

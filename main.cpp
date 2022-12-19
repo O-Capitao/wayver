@@ -4,11 +4,11 @@
 #include <boost/thread.hpp>
 #include <boost/chrono.hpp>
 
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/basic_file_sink.h"
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
-#include "audio.hpp"
-#include "wayver-ui.hpp"
+#include <wayver-audio.hpp>
+#include <wayver-ui.hpp>
 
 /***
  * Main Fn Headers
@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
     boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *queue_audio_to_ui = 
         new boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>>();
 
-    Wayver::AudioEngine engine;
+    Wayver::Audio::AudioEngine engine;
 
     engine.loadFile(path.c_str());
     SF_INFO sound_file_info = engine.getSoundFileInfo();
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
 
     engine.setAudioToUiQueue( queue_audio_to_ui );
 
-    Wayver::WayverUi ui;
+    Wayver::UI::WayverUi ui;
 
     ui.initUiState(
         N_CHANNELS,
@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
     ui.initWindow();
 
     // start audio thread
-    boost::thread playT{boost::bind(&Wayver::AudioEngine::run, &engine)};
+    boost::thread playT{boost::bind(&Wayver::Audio::AudioEngine::run, &engine)};
     
     ui.run();
     
