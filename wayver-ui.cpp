@@ -13,6 +13,7 @@ using namespace Wayver::UI;
 
 
 WayverUi::WayverUi()
+:_logger(spdlog::basic_logger_mt("UI", "wayver.log"))
 {
     /****
      * 
@@ -45,9 +46,8 @@ WayverUi::WayverUi()
         _globals._WIN_SIZE.y - _scrubber_rect.h - _scrubber_rect.y - _globals._PADDING 
     };
 
-    // initWindow();
-    _spectrum = new Spectrum(_spectrum_rect, renderer );
-
+    _logger->info("Constructed");
+    _logger->flush();    
 }
 
 
@@ -57,7 +57,7 @@ WayverUi::WayverUi()
 
 WayverUi::~WayverUi(){
     
-    delete _spectrum;
+    delete _scrubber;
 
     //Destroy window	
 	SDL_DestroyRenderer( renderer );
@@ -82,20 +82,18 @@ WayverUi::~WayverUi(){
  * Public Initializations - Called from main
 */
 void WayverUi::initUiState(
-    int n_c,
-    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *rdptr
-){
-    _logger = spdlog::basic_logger_mt("UI", "wayver.log");
-    // this->_input_from_audio = ifa;
+    Bus::Queues *_q_ptr,
+    const SF_INFO &info
+)
+{
     
-    this->_n_channels = n_c;
-    this->_n_samples_in = _n_channels * _n_frames_per_buffer;
+    this->_sfInfo = info;
+    this->_n_samples_in = info.channels * _n_frames_per_buffer;
     this->_samples_in_vec.reserve( _n_samples_in );
-    this->_rawDataTap_ptr = rdptr;
-
-    
+    this->_queues_ptr = _q_ptr;
 
     _logger->debug("Finished Constructor");
+    _logger->flush();
 }
 
 void WayverUi::initWindow(){
@@ -136,6 +134,15 @@ void WayverUi::initWindow(){
 
     _initFonts();
 
+    _scrubber = new Scrubber(
+        _scrubber_rect,
+        renderer,
+        _sfInfo,
+        body_font
+    );
+
+    _logger->debug("initWindow()");
+    _logger->flush();
 }
 
 
@@ -152,8 +159,8 @@ void WayverUi::_initFonts(){
     assert(ttfInited >= 0);
 
     title_font = TTF_OpenFont( "assets/Instruction.ttf", 59 );
-    body_font = TTF_OpenFont( "assets/Instruction.ttf", 31 );
-    labels_font = TTF_OpenFont( "assets/Instruction.ttf", 23 );
+    body_font = TTF_OpenFont( "assets/Instruction.ttf", 21 );
+    labels_font = TTF_OpenFont( "assets/Instruction.ttf", 17 );
     
     if (title_font == NULL || body_font == NULL || labels_font == NULL){
 
@@ -172,40 +179,51 @@ void WayverUi::_initFonts(){
 */
 void WayverUi::run(){
     _logger->debug("Starting run()");
+    _logger->flush();
 
     // initWindow();
-    std::vector<float> *frames = new std::vector<float>();
-    float item = 0;
-    // AccumFunctor fun(frames);
-    auto consume_pending = [&] {
-        while (_rawDataTap_ptr->pop(item)) {
-            frames->push_back(item);
-        }
-    };
+    // std::vector<float> *frames = new std::vector<float>();
+    // float item = 0;
 
-    // Main loop
-    while (!_stop)
-    {
-        // check if new data ojn data tap exists
-        // as soon aas no new data is available -> close the window
-        int items_in_queue = _rawDataTap_ptr->read_available();
-        _frames_counter += items_in_queue;
+    // auto consume_pending = [&] {
+    //     while ( _queues_ptr->_queue_audio_to_ui.pop(item)) {
+    //         frames->push_back(item);
+    //     }
+    // };
 
-        consume_pending();
+    while (!_QUIT ) {
+
+        _handleEvents();
+
+        // int items_in_queue = _queues_ptr->_queue_audio_to_ui.read_available();
+        _frames_counter = _queues_ptr->head;
+        
+
+        // consume_pending();
+
+        // if (items_in_queue > 0){
+        //     _logger->debug("consumed pending.");
+        //     _logger->flush();
+        // }
+        
+        
+        _update();
 
         _draw();
 
         boost::this_thread::sleep_for( boost::chrono::milliseconds( UI_WAIT_TIME ) );
     }
 
-    frames->empty();
-    delete frames;
+    // frames->empty();
+    // delete frames;
     _logger->debug("Exiting run()");
+    _logger->flush();
 }
 
 void WayverUi::stop(){
     _logger->debug("Received STOP signal.");
-    _stop = true;
+    _logger->flush();
+    _QUIT = true;
 }
 
 
@@ -217,16 +235,6 @@ void WayverUi::stop(){
  * Draw
 */
 void WayverUi::_draw(){
-    SDL_Event e;
-    //Handle events on queue
-    while( SDL_PollEvent( &e ) != 0 )
-    {
-        //User requests quit
-        if( e.type == SDL_QUIT )
-        {
-            _stop = true;
-        }
-    }
 
     //Clear screen
     SDL_SetRenderDrawColor( 
@@ -239,100 +247,18 @@ void WayverUi::_draw(){
     
     SDL_RenderClear( renderer );
 
-    _draw_Spectrum();
-    _draw_Info();
-    _draw_Scrubber();
-    _draw_sampleCounter();
+    // _draw_Spectrum();
+    // _draw_Info();
+    _scrubber->draw();
+    // _draw_sampleCounter();
     
+
     SDL_RenderPresent(renderer);
 }
 
-void WayverUi::_draw_sampleCounter(){
-    
-    std::string _sample_counter_text = std::to_string( _frames_counter );
-
-    SDL_Surface *textSurface = TTF_RenderText_Blended( body_font, _sample_counter_text.c_str(), _globals._FOREGROUND_1 );
-    SDL_Texture *textTexture = SDL_CreateTextureFromSurface( renderer, textSurface );
-
-    SDL_Point _texture_size = _getSize( textTexture );
-
-    SDL_Rect src = {
-        .x = 0, .y=0, .w= _texture_size.x, .h=_texture_size.y
-    };
-    SDL_Rect tgt = {
-        .x = 0, .y=0, .w=_texture_size.x, .h=_texture_size.y
-    };
-
-
-    SDL_RenderCopy(
-        renderer,
-        textTexture,
-        &src,
-        &tgt
-    );
-
-    SDL_DestroyTexture( textTexture );
-    SDL_FreeSurface( textSurface );
+void WayverUi::_update(){
+    _scrubber->update( _frames_counter );
 }
-
-
-void WayverUi::_draw_Spectrum(){
-    // draw borders
-    SDL_SetRenderDrawColor( renderer, 
-        _globals._FOREGROUND_1.r,
-        _globals._FOREGROUND_1.g,
-        _globals._FOREGROUND_1.b,
-        _globals._FOREGROUND_1.a
-    );
-
-    SDL_RenderFillRect(renderer, &_spectrum_rect);
-
-    // for (int i = 0; i < 4; i++){
-    //     SDL_FLine &line_to_draw = _spectrum.borders[i];
-
-    //     SDL_RenderDrawLineF(renderer, line_to_draw.pa.x, line_to_draw.pa.y, line_to_draw.pb.x, line_to_draw.pb.y );
-        
-    // }
-
-    // // draw grid lines
-    // for (auto ptr = _spectrum.grid_lines.begin(); ptr < _spectrum.grid_lines.end(); ptr++){
-
-    //     const SDL_FLine &line_to_draw = _spectrum.line_toWindowCoords(*ptr);
-
-    //     SDL_RenderDrawLineF(renderer, line_to_draw.pa.x, line_to_draw.pa.y, line_to_draw.pb.x, line_to_draw.pb.y );
-    // }
-}
-
-
-void WayverUi::_draw_Scrubber(){
-    // SDL_SetRenderDrawColor( renderer, 100, 120, 100, 255 );
-    // SDL_RenderFillRect( renderer, &_scrubber_rect );
-
-    // draw the sections outline:
-    SDL_SetRenderDrawColor(
-        renderer, 
-        _globals._FOREGROUND_1.r, 
-        _globals._FOREGROUND_1.g, 
-        _globals._FOREGROUND_1.b, 
-        _globals._FOREGROUND_1.a
-    );
-
-    SDL_Rect innerRect = {
-        _scrubber_rect.x + _globals._INNER_PADDING,
-        _scrubber_rect.y + _globals._INNER_PADDING,
-        _scrubber_rect.w - 2 * _globals._INNER_PADDING,
-        _scrubber_rect.h - 2 * _globals._INNER_PADDING
-    };
-
-    SDL_RenderDrawRect( renderer, &innerRect );
-}
-
-
-void WayverUi::_draw_Info(){
-    SDL_SetRenderDrawColor( renderer, 200, 120, 100, 255 );
-    SDL_RenderFillRect( renderer, &_info_rect );
-}
-
 
 
 
@@ -347,6 +273,50 @@ SDL_Point WayverUi::_getSize(SDL_Texture *texture) {
     return size;
 }
 
+void WayverUi::setSfInfo(const SF_INFO &sfi){
+    _sfInfo = sfi;
+}
+
+
+void WayverUi::_handleEvents(){
+    SDL_Event e;
+
+    while( SDL_PollEvent( &e ) != 0 )
+    {
+        switch(e.type) {
+
+            case SDL_QUIT:
+                _queues_ptr->_queue_commands.push( Bus::Command::QUIT );
+                _QUIT = true;
+                break;
+
+            case SDL_KEYUP:
+                switch (e.key.keysym.sym)
+                {
+                case 'q':
+                    _queues_ptr->_queue_commands.push( Bus::Command::QUIT );
+                    _QUIT = true;
+                    break;
+                
+                default:
+                    break;
+                }
+            case SDL_KEYDOWN:
+                switch (e.key.keysym.sym)
+                {
+                case SDLK_SPACE:
+                    _PAUSE = true;
+                    _queues_ptr->_queue_commands.push( Bus::Command::PAUSE_PLAY );
+                    break;
+                
+                default:
+                    break;
+                }
+            default:
+            break;
+        }
+    }
+}
 
 
 
@@ -360,7 +330,6 @@ UIComponent::UIComponent(
 :
 _renderer(r),
 _content_rect(contentRect)
-
 {}
 
 // UIComponent::~UIComponent(){}
@@ -418,24 +387,197 @@ SDL_FLine Spectrum::line_toWindowCoords ( const SDL_FLine &_line ){
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/***
+ * SCRUBBER
+*/
 Scrubber::Scrubber(
     const SDL_Rect &contentRect,
     SDL_Renderer *r,
-    int total_samples,
-    int current_sample,
-    int current_buffer,
-    int frames_per_buffer
-):UIComponent(contentRect, r)
+    const SF_INFO &sfi,
+    TTF_Font *f
+):UIComponent(contentRect, r),
+_font(f)
 {
+    _logger = spdlog::basic_logger_mt("UI::Scrubber", "wayver.log");
+
+    _sf_info = sfi;
+
+    _scrub_bar_rect_outer = {
+        (float)_content_rect.x + 10,
+        (float)_content_rect.y + 10,
+        (float)_content_rect.w - 20,
+        8
+    };
+
+    _scrub_bar_rect_inner = {
+        _scrub_bar_rect_outer.x,
+        _scrub_bar_rect_outer.y,
+        0,
+        _scrub_bar_rect_outer.h
+    };
+
+    _timeLabelPosition = {
+        _scrub_bar_rect_outer.x,
+        _scrub_bar_rect_outer.y + _scrub_bar_rect_outer.h + 5
+    };
+
+    _max_scrubber_bar_width = _scrub_bar_rect_outer.w;
+
+    _total_ms = 1000 * (float)sfi.frames / (float)sfi.samplerate;
+    std::string cc = _ms_to_time_string(_total_ms);
+
+    _logger->debug(
+        "Constructed\n     total frame count = {}\n     total time:{}\n     total time (pretty): '{}'", 
+        sfi.frames,
+        _total_ms,
+        cc
+    );
+
+    _logger->flush();
 
 }
 
-Scrubber::~Scrubber(){}
+Scrubber::~Scrubber(){
+
+    _logger->debug("~Scrubber()\n   total frames processed: {}", _frame_counter );
+    _logger->flush();
+
+}
+
+const std::string Scrubber::_ms_to_time_string(int time_ms){
+    std::string retval = "";
+
+    int total_seconds = time_ms / 1000;
+
+    int total_minutes = total_seconds / 60;
+    int leftover_seconds = total_seconds % 60;
+
+    retval = 
+        ((total_minutes < 10) ? "0" : "") +
+        std::to_string( total_minutes ) + ":" + 
+        ((leftover_seconds < 10) ? "0" : "") +
+        std::to_string( leftover_seconds );
+
+    return retval;
+}
+
+
 
 void Scrubber::draw(){
+    SDL_SetRenderDrawColor(
+        _renderer,
+        globals._FOREGROUND_1.r,
+        globals._FOREGROUND_1.g,
+        globals._FOREGROUND_1.b,
+        globals._FOREGROUND_1.a
+    );
+
+    SDL_RenderDrawRect( _renderer, &_content_rect );
+    SDL_RenderFillRectF( _renderer, &_scrub_bar_rect_outer );
+
+    SDL_SetRenderDrawColor(
+        _renderer,
+        globals._FOREGROUND_2.r,
+        globals._FOREGROUND_2.g,
+        globals._FOREGROUND_2.b,
+        globals._FOREGROUND_2.a
+    );
+    SDL_RenderFillRectF(_renderer, &_scrub_bar_rect_inner );
+
+    _draw_TimeText();
+}
+
+void Scrubber::update( int sc ){
+    _frame_counter = sc;
+    // int _ellapsed_ms = sc / (_sf_info.channels * _sf_info.samplerate / 1000);
+    float gone_by_ratio = (float)(sc)
+        /(float)(_sf_info.frames);
+    
+    // recalc play rect
+    _scrub_bar_rect_inner.w = gone_by_ratio * _max_scrubber_bar_width;
 
 }
 
+// privates:
+void Scrubber::_draw_TimeText(){
+
+    SDL_Surface* text;
+    
+    std::string _temp_text = _ms_to_time_string( 
+        1000 * (float)_frame_counter / (float)_sf_info.samplerate)
+        + " / "
+        + _ms_to_time_string( _total_ms );
+
+    text = TTF_RenderText_Solid( 
+        _font, 
+        _temp_text.c_str(), 
+        globals._FOREGROUND_2 );
+
+    SDL_Texture* text_texture;
+    text_texture = SDL_CreateTextureFromSurface( _renderer, text );
+
+    SDL_Rect src = {
+        0,0,text->w, text->h
+    };
+
+    SDL_Rect dest = { 
+        (int)floor(_timeLabelPosition.x),
+        (int)floor(_timeLabelPosition.y),
+        text->w, text->h };
+
+    SDL_RenderCopy( _renderer, text_texture, &src, &dest );
+
+    // cleanup
+    SDL_DestroyTexture( text_texture );
+    SDL_FreeSurface( text );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * Static Info
+*/
 StaticInfo::StaticInfo(
     const SDL_Rect &contentRect,
     SDL_Renderer *r

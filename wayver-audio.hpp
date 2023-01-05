@@ -1,9 +1,11 @@
 #pragma once
 
-#include "wayver-defines.hpp"
+#include <wayver-defines.hpp>
+#include <wayver-ui.hpp>
+#include <wayver-bus.hpp>
 
-#include "portaudio.h"
-#include "sndfile.hh"
+#include <portaudio.h>
+#include <sndfile.hh>
 #include <string>
 #include <vector>
 
@@ -14,9 +16,10 @@
 #include <complex>
 #include <fftw3.h>
 
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/basic_file_sink.h"
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 #include <boost/lockfree/spsc_queue.hpp>
+
 
 // about FFTs:
 // https://www.dataq.com/data-acquisition/general-education-tutorials/fft-fast-fourier-transform-waveform-analysis.html
@@ -39,12 +42,17 @@ namespace Wayver {
 
             SNDFILE* file = NULL;
             SF_INFO  info;
+            SF_FORMAT_INFO format;
+
             std::string file_path;
 
+            /* Frames read */
             int readHead = 0;
-            int count = 1;
+            // int count = 1;
 
-            boost::lockfree::spsc_queue<float, boost::lockfree::capacity<W_QUEUE_SIZE>> *_rawDataTap_ptr;
+            Bus::Queues *_q_ptr = NULL;
+
+            std::shared_ptr<spdlog::logger> _logger;
         };
 
         /***
@@ -60,6 +68,8 @@ namespace Wayver {
                 InternalAudioData* _data = NULL;
                 PaStream *stream;
                 std::shared_ptr<spdlog::logger> _logger;
+
+                Bus::Queues *_queues_ptr;
 
                 static int _paStreamCallback( 
                     const void *inputBuffer,
@@ -77,18 +87,13 @@ namespace Wayver {
 
                 // Player Actions
                 void loadFile(const std::string& path);
-
-                void setAudioToUiQueue( 
-                    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *queue_ptr 
-                );
+                void registerQueues(Bus::Queues *_q_ptr);
 
                 void closeFile(); 
 
                 // Audio Thread
                 void run();
                 void pauseFile();
-
-                boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>>  *getRawDataTap_ptr();
 
                 const SF_INFO &getSoundFileInfo();    
         };

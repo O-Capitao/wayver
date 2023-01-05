@@ -9,6 +9,7 @@
 
 #include <wayver-audio.hpp>
 #include <wayver-ui.hpp>
+#include <wayver-bus.hpp>
 
 /***
  * Main Fn Headers
@@ -35,29 +36,24 @@ int main(int argc, char *argv[])
         path = argv[2];
     }
 
-
     auto logger = initLogging();
     logger->debug("Opening {}", path);
 
-    // init the QUEUE
-    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *queue_audio_to_ui = 
-        new boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>>();
-
+    Wayver::Bus::Queues queues;
     Wayver::Audio::AudioEngine engine;
 
     engine.loadFile(path.c_str());
     SF_INFO sound_file_info = engine.getSoundFileInfo();
-    
-    int N_CHANNELS = sound_file_info.channels;
 
-    engine.setAudioToUiQueue( queue_audio_to_ui );
+    engine.registerQueues( &queues );
 
     Wayver::UI::WayverUi ui;
 
     ui.initUiState(
-        N_CHANNELS,
-        queue_audio_to_ui
+        &queues,
+        sound_file_info
     );
+
     ui.initWindow();
 
     // start audio thread
@@ -68,10 +64,10 @@ int main(int argc, char *argv[])
     // block until finished
     playT.join();
     ui.stop();
-    // uiT.join();
     
-    logger->debug("Joined threads");
-
+    logger->info("Joined threads");
+    logger->flush();
+    
 	return 0;
 }
 
@@ -82,8 +78,8 @@ std::shared_ptr<spdlog::logger> initLogging()
     _logger = spdlog::basic_logger_mt("MAIN", "wayver.log");
     spdlog::set_level( spdlog::level::debug );
     spdlog::flush_every(std::chrono::seconds(2));
-    _logger->info("Starting WAYVER\n");
-
+    _logger->info("\n-------------\n------------\nStarting WAYVER\n");
+    _logger->flush();
     return _logger;
 
 }

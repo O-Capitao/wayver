@@ -9,11 +9,13 @@ using namespace Wayver::Audio;
 
 InternalAudioData::InternalAudioData(
     const std::string &p
-):file(sf_open( p.c_str(), SFM_READ, &info))
-{}
+):file(sf_open( p.c_str(), SFM_READ, &info)),
+_logger(spdlog::basic_logger_mt("AUDIO INTERNAL", "wayver.log"))
+{
+}
 
 InternalAudioData::~InternalAudioData(){
-    delete _rawDataTap_ptr;    
+    // delete _rawDataTap_ptr;    
 }
 
 
@@ -32,14 +34,16 @@ std::string arrayToString(float *arr, int len){
 }
 
 
-AudioEngine::AudioEngine(){
-
-    //init logging
-    _logger = spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log");
+AudioEngine::AudioEngine()
+:_logger(spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log"))
+{
     _logger->debug( "Constructed" );
+    _logger->flush();
 }
 
 AudioEngine::~AudioEngine(){
+    _logger->info("~AudioEngine()");
+    _logger->flush();
     delete _data;
 }
 
@@ -54,12 +58,23 @@ void AudioEngine::loadFile( const std::string& path){
     }
 
     _data = new InternalAudioData( path );
+
+    _logger ->info(
+        "Successfully loaded file:\n  channels= {}\n  sample rate= {}\n  total Frames= {}\n  sections= {}\n  seekable= {}\n  format={}",
+        _data->info.channels,
+        _data->info.samplerate, 
+        _data->info.frames,
+        _data->info.sections,
+        _data->info.seekable,
+        _data->info.format );
+
+    _logger->flush();
 }
 
 int AudioEngine::_paStreamCallback(
     const void *input
-    ,void *output
-    ,unsigned long frameCount
+    ,void *output /* The data sent to the Audio Device */
+    ,unsigned long frameCount /* frames in buffer - samples / channels */
     ,const PaStreamCallbackTimeInfo *timeInfo
     ,PaStreamCallbackFlags statusFlags
     ,void *userData
@@ -79,36 +94,64 @@ int AudioEngine::_paStreamCallback(
 
     /* read directly into output buffer */
     num_read = sf_read_float(p_data->file, out, frameCount * p_data->info.channels);
+    
     float val;
     int pushedItems;
 
-    // push read values into queue
-    if (p_data->_rawDataTap_ptr->read_available() == 0){
-        for (int i = 0; i < frameCount * p_data->info.channels; i++)
-        {
-            val = out[i];
-            pushedItems = p_data->_rawDataTap_ptr->read_available();
+    Bus::Command _cmd;
 
-            if (pushedItems == W_QUEUE_SIZE){
-                p_data->_rawDataTap_ptr->pop();
-            }
+    // p_data->_logger->debug("_paStreamCallback - processing buffer.\n  frameCount={}\n  num_read={}", 
+    //     frameCount, 
+    //     num_read);
 
-            if (!p_data->_rawDataTap_ptr->push( val )){
+    p_data->readHead += (num_read / p_data->info.channels);
+    p_data->_q_ptr->head = p_data->readHead;
+    // OUTPUT
+    
+    // if (p_data->_q_ptr->_queue_audio_to_ui.read_available() == 0){
+    
+    // for (int i = 0; i < frameCount * p_data->info.channels; i++)
+    // {
+    //     val = out[i];
+    //     pushedItems = p_data->_q_ptr->_queue_audio_to_ui.read_available();
+    //     p_data->readHead++;
 
-                int writespace = p_data->_rawDataTap_ptr->write_available();
-                printf("Failed to push value %f into position %d.\n", val, i);
-                printf("Queue already had %d items. And can take %d.\n", pushedItems, writespace );
-                return paAbort;
-            
-            }
+    //     p_data->_logger->debug("_paStreamCallback - pushedItems={} - read head={}",pushedItems, p_data->readHead);
 
+    //     if (pushedItems == W_QUEUE_SIZE){
+    //         p_data->_logger->debug("Queue full, popping");
+    //         if (!p_data->_q_ptr->_queue_audio_to_ui.pop()){
+    //             p_data->_logger->error("Error popping...");
+    //         }
+    //     }
+
+    //     if (!p_data->_q_ptr->_queue_audio_to_ui.push( val )){
+
+    //         int writespace = p_data->_q_ptr->_queue_audio_to_ui.write_available();
+
+    //         printf("Failed to push value %f into position %d.\n", val, i);
+    //         printf("Queue already had %d items. And can take %d.\n", pushedItems, writespace );
+    //         return paAbort;
+        
+    //     }
+
+    // }
+    // }
+
+    // INPUT Q
+    while ( p_data->_q_ptr->_queue_commands.pop(_cmd)) {
+        if ( _cmd == Bus::Command::QUIT ){
+            return paComplete;
         }
     }
     
-    
+    p_data->_logger->flush();
     /*  If we couldn't read a full frameCount of samples we've reached EOF */
     if (num_read < frameCount)
     {
+        p_data->_logger->debug("File reached the end");
+        p_data->_logger->flush();
+
         return paComplete;
     }
     
@@ -165,6 +208,7 @@ void AudioEngine::run(){
 void AudioEngine::closeFile()
 {   
     _logger->info("Closing File");
+    _logger->flush();
     
     PaError err;
 
@@ -190,12 +234,10 @@ const SF_INFO &AudioEngine::getSoundFileInfo(){
     return _data->info;
 }
 
-boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *AudioEngine::getRawDataTap_ptr(){
-    return _data->_rawDataTap_ptr;
-}
-
-void AudioEngine::setAudioToUiQueue( 
-    boost::lockfree::spsc_queue<float,boost::lockfree::capacity<W_QUEUE_SIZE>> *queue_ptr 
+void AudioEngine::registerQueues( 
+    Bus::Queues *q_ptr
 ){
-    _data->_rawDataTap_ptr = queue_ptr;
+    this->_queues_ptr = q_ptr;
+
+    _data->_q_ptr = q_ptr;
 }
