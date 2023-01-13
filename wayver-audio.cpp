@@ -53,7 +53,7 @@ void AudioEngine::loadFile( const std::string& path){
     _logger->debug("loadFile()");
 
     if (_data != NULL){
-        closeFile();
+        _closeFile();
         delete _data;
     }
 
@@ -82,30 +82,23 @@ int AudioEngine::_paStreamCallback(
 
     float *out;
     InternalAudioData *p_data = (InternalAudioData*)userData;
-
     sf_count_t num_read;
 
     out = (float*)output;
-
     p_data = (InternalAudioData*)userData;
-
     /* clear output buffer */
     memset(out, 0, sizeof(float) * frameCount * p_data->info.channels);
 
     /* read directly into output buffer */
     num_read = sf_read_float(p_data->file, out, frameCount * p_data->info.channels);
     
-    float val;
-    int pushedItems;
-
-    Bus::Command _cmd;
-
-    // p_data->_logger->debug("_paStreamCallback - processing buffer.\n  frameCount={}\n  num_read={}", 
-    //     frameCount, 
-    //     num_read);
 
     p_data->readHead += (num_read / p_data->info.channels);
     p_data->_q_ptr->head = p_data->readHead;
+
+    // float val;
+    // int pushedItems;
+
     // OUTPUT
     
     // if (p_data->_q_ptr->_queue_audio_to_ui.read_available() == 0){
@@ -138,14 +131,9 @@ int AudioEngine::_paStreamCallback(
     // }
     // }
 
-    // INPUT Q
-    while ( p_data->_q_ptr->_queue_commands.pop(_cmd)) {
-        if ( _cmd == Bus::Command::QUIT ){
-            return paComplete;
-        }
-    }
     
-    p_data->_logger->flush();
+    // p_data->_logger->flush();
+
     /*  If we couldn't read a full frameCount of samples we've reached EOF */
     if (num_read < frameCount)
     {
@@ -162,18 +150,77 @@ int AudioEngine::_paStreamCallback(
 void AudioEngine::run(){
 
     _logger->debug("Starting playFile()");
-    PaError err = Pa_Initialize();
-
-    if (err != paNoError){
+    
+    if ( Pa_Initialize() != paNoError){
+        _logger->error("run() : Error initing the AudioEngine");
         throw std::runtime_error("Error initing the AudioEngine");
     }
 
     if ( _data == NULL ){
-        err = Pa_Terminate();
-        throw std::runtime_error("No data to play, shutting down.\n");
+        Pa_Terminate();
+        _logger->error("run() : No data to play, shutting down.");
+        throw std::runtime_error("No data to play, shutting down.");
     }
 
-    err = Pa_OpenDefaultStream(
+    _openStream();
+    _startStream();
+    
+    
+    /* Main Event Loop */
+    while (!_QUIT_SIG){
+
+        Bus::Command _cmd;
+        // Process User Actions
+        while ( _queues_ptr->_queue_commands.pop(_cmd)) {
+
+            
+            
+            if ( _cmd == Bus::Command::QUIT ){
+
+                _QUIT_SIG = true;
+
+                // pass data to user obj
+                // let the callback stop gracefully.
+                // _data->STOP_SIGNALLED = true;
+
+                // stop stream from Callback
+                if (_PLAYING_SIG){
+                    _stopStream();
+                }
+                
+            
+            } 
+
+            if ( _cmd == Bus::Command::PAUSE_PLAY ){
+                
+
+                if (_PLAYING_SIG){
+                    _logger->debug("run() - cmd == Bus::Command::PAUSE_PLAY, PAUSING");
+                    // _data->STOP_SIGNALLED = true;
+                    // Pa_Sleep(100);
+                    // // stop stream from Callback
+                    _stopStream();
+                } else {
+                    _logger->debug("run() - cmd == Bus::Command::PAUSE_PLAY, PLAYING");
+                    // _data->STOP_SIGNALLED = false;
+                    _startStream();
+                }
+            }
+        }
+
+        Pa_Sleep(500);
+    }
+
+    _closeStream();
+    _closeFile();
+
+}
+
+void AudioEngine::_openStream(){
+
+    _logger->debug("AudioEngine::_openStream()");
+
+    PaError e = Pa_OpenDefaultStream(
         &stream,
         0,
         _data->info.channels,
@@ -184,49 +231,68 @@ void AudioEngine::run(){
         _data
     );
 
-    if( err != paNoError )
-    {
-        throw std::runtime_error("Error opening Stream.\n");
+    if (e != paNoError){
+        std::string msg = Pa_GetErrorText( e );
+        _logger->error( "Error opening stream. msg; {}", msg );
+        throw std::runtime_error("Could not Open stream.");
     }
-
-    err = Pa_StartStream(stream);
-
-    if (err != paNoError){
-        throw std::runtime_error("Error starting Stream\n");
-    }
-  
-    /* Run until EOF is reached */
-    while(Pa_IsStreamActive(stream))
-    {
-        Pa_Sleep(100);
-    }
-
-    closeFile();
 
 }
 
-void AudioEngine::closeFile()
+void AudioEngine::_startStream(){
+
+    _logger->debug("AudioEngine::_startStream()");
+    PaError e = Pa_StartStream(stream);
+    _PLAYING_SIG = true;
+
+    if (e != paNoError){
+        std::string msg = Pa_GetErrorText( e );
+        _logger->error( "Error starting stream. msg; {}", msg );
+        throw std::runtime_error("Could not Start stream.");
+    }
+}
+
+void AudioEngine::_stopStream(){
+
+    _logger->debug("AudioEngine::_stopStream()");
+    PaError e = Pa_StopStream(stream);
+    _PLAYING_SIG = false;
+
+    if (e != paNoError){
+        std::string msg = Pa_GetErrorText( e );
+        _logger->error( "Error stopping stream. msg; {}", msg );
+        throw std::runtime_error("Could not Stop stream.");
+    }
+}
+
+void AudioEngine::_closeStream(){
+    _logger->debug("AudioEngine::_closeStream()");
+    PaError e = Pa_CloseStream(stream);
+
+    stream = NULL; 
+
+    if (e != paNoError){
+        std::string msg = Pa_GetErrorText( e );
+        _logger->error( "Error closing stream. msg; {}", msg );
+        throw std::runtime_error("Could not close stream.");
+    }
+
+}
+
+void AudioEngine::_closeFile()
 {   
     _logger->info("Closing File");
     _logger->flush();
     
-    PaError err;
-
     /* Close the soundfile */
     sf_close(_data->file);
-
-    /*  Shut down portaudio */
-    err = Pa_CloseStream(stream);
-    if(err != paNoError)
-    {
-        throw std::runtime_error("Error closing Stream.\n");
-    }
     
-    err = Pa_Terminate();
+    PaError err = Pa_Terminate();
     if(err != paNoError)
     {
         throw std::runtime_error("Error terminating Portaudio.\n");
     }
+
 }
 
 
@@ -238,6 +304,5 @@ void AudioEngine::registerQueues(
     Bus::Queues *q_ptr
 ){
     this->_queues_ptr = q_ptr;
-
     _data->_q_ptr = q_ptr;
 }

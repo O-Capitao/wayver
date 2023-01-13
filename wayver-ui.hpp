@@ -23,7 +23,7 @@ namespace Wayver {
             const SDL_Point _WIN_SIZE = {1024,768};
             const int _PADDING = 20;
             const int _INNER_PADDING = 2;
-            const int _SCRUBBER_HEIGHT = 50;
+            const int _SCRUBBER_HEIGHT = 60;
             const int _INFO_WIDTH = 300;
 
             // Colors
@@ -190,7 +190,12 @@ namespace Wayver {
 
             // flags
             bool _QUIT = false;
-            bool _PAUSE = false;
+
+            // Throttle user events
+            const int _THROTTLE_TIME_MS = 300;
+            int _throttleTimer_start = 0;
+            bool _throttleActive = false;
+
 
             // spectogram grid
             // Spectrum *_spectrum = NULL;

@@ -158,9 +158,9 @@ void WayverUi::_initFonts(){
     int ttfInited = TTF_Init();
     assert(ttfInited >= 0);
 
-    title_font = TTF_OpenFont( "assets/Instruction.ttf", 59 );
+    title_font = TTF_OpenFont( "assets/Instruction.ttf", 72 );
     body_font = TTF_OpenFont( "assets/Instruction.ttf", 21 );
-    labels_font = TTF_OpenFont( "assets/Instruction.ttf", 17 );
+    labels_font = TTF_OpenFont( "assets/Instruction.ttf", 16 );
     
     if (title_font == NULL || body_font == NULL || labels_font == NULL){
 
@@ -279,6 +279,14 @@ void WayverUi::setSfInfo(const SF_INFO &sfi){
 
 
 void WayverUi::_handleEvents(){
+
+    // take care of throttle_counter;
+    if (_throttleActive && ((SDL_GetTicks() - _throttleTimer_start) >= _THROTTLE_TIME_MS)){
+
+        _throttleActive = false;
+
+    }
+    
     SDL_Event e;
 
     while( SDL_PollEvent( &e ) != 0 )
@@ -297,7 +305,6 @@ void WayverUi::_handleEvents(){
                     _queues_ptr->_queue_commands.push( Bus::Command::QUIT );
                     _QUIT = true;
                     break;
-                
                 default:
                     break;
                 }
@@ -305,10 +312,13 @@ void WayverUi::_handleEvents(){
                 switch (e.key.keysym.sym)
                 {
                 case SDLK_SPACE:
-                    _PAUSE = true;
-                    _queues_ptr->_queue_commands.push( Bus::Command::PAUSE_PLAY );
+                    if (!_throttleActive){
+                        _queues_ptr->_queue_commands.push( Bus::Command::PAUSE_PLAY );
+                        _throttleActive = true;
+                        _throttleTimer_start = SDL_GetTicks();
+                    }
+                    
                     break;
-                
                 default:
                     break;
                 }
@@ -531,10 +541,11 @@ void Scrubber::_draw_TimeText(){
         + " / "
         + _ms_to_time_string( _total_ms );
 
-    text = TTF_RenderText_Solid( 
+    text = TTF_RenderText_Shaded( 
         _font, 
         _temp_text.c_str(), 
-        globals._FOREGROUND_2 );
+        globals._FOREGROUND_2,
+        globals._BACKGROUND_1 );
 
     SDL_Texture* text_texture;
     text_texture = SDL_CreateTextureFromSurface( _renderer, text );

@@ -48,11 +48,12 @@ namespace Wayver {
 
             /* Frames read */
             int readHead = 0;
-            // int count = 1;
 
             Bus::Queues *_q_ptr = NULL;
 
             std::shared_ptr<spdlog::logger> _logger;
+
+            bool STOP_SIGNALLED = false;
         };
 
         /***
@@ -66,10 +67,13 @@ namespace Wayver {
             private:
                 
                 InternalAudioData* _data = NULL;
-                PaStream *stream;
+                PaStream *stream = NULL;
                 std::shared_ptr<spdlog::logger> _logger;
 
                 Bus::Queues *_queues_ptr;
+
+                bool _QUIT_SIG = false;
+                bool _PLAYING_SIG = false;
 
                 static int _paStreamCallback( 
                     const void *inputBuffer,
@@ -79,6 +83,14 @@ namespace Wayver {
                     PaStreamCallbackFlags statusFlags,
                     void *userData
                 );
+
+                void _openStream();
+                void _closeStream();
+                void _startStream();
+                void _stopStream();
+                
+                void _closeFile();
+
             public:
 
                 AudioEngine();
@@ -89,11 +101,11 @@ namespace Wayver {
                 void loadFile(const std::string& path);
                 void registerQueues(Bus::Queues *_q_ptr);
 
-                void closeFile(); 
+                // void closeFile(); 
 
                 // Audio Thread
                 void run();
-                void pauseFile();
+                // void pauseFile();
 
                 const SF_INFO &getSoundFileInfo();    
         };
