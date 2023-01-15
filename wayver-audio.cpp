@@ -15,24 +15,7 @@ _logger(spdlog::basic_logger_mt("AUDIO INTERNAL", "wayver.log"))
 }
 
 InternalAudioData::~InternalAudioData(){
-    // delete _rawDataTap_ptr;    
 }
-
-
-std::string arrayToString(float *arr, int len){
-    std::string retval = "";
-    for (int i=0;i<len;i++){
-
-        retval += std::to_string(i) + ": ";
-        retval += std::to_string(arr[i]);
-
-        if (i != len - 1 ){
-            retval += "; ";
-        }
-    }
-    return retval;
-}
-
 
 AudioEngine::AudioEngine()
 :_logger(spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log"))
@@ -88,13 +71,20 @@ int AudioEngine::_paStreamCallback(
     p_data = (InternalAudioData*)userData;
     /* clear output buffer */
     memset(out, 0, sizeof(float) * frameCount * p_data->info.channels);
+    
+    if (!p_data->STOPPED){
 
-    /* read directly into output buffer */
-    num_read = sf_read_float(p_data->file, out, frameCount * p_data->info.channels);
+        // write silence;
+        /* read directly into output buffer */
+        num_read = sf_read_float(p_data->file, out, frameCount * p_data->info.channels);
+
+        p_data->readHead += (num_read / p_data->info.channels);
+        p_data->_q_ptr->head = p_data->readHead;
+
+    }
     
 
-    p_data->readHead += (num_read / p_data->info.channels);
-    p_data->_q_ptr->head = p_data->readHead;
+
 
     // float val;
     // int pushedItems;
@@ -172,43 +162,31 @@ void AudioEngine::run(){
         Bus::Command _cmd;
         // Process User Actions
         while ( _queues_ptr->_queue_commands.pop(_cmd)) {
-
-            
             
             if ( _cmd == Bus::Command::QUIT ){
 
                 _QUIT_SIG = true;
 
-                // pass data to user obj
-                // let the callback stop gracefully.
-                // _data->STOP_SIGNALLED = true;
-
                 // stop stream from Callback
-                if (_PLAYING_SIG){
-                    _stopStream();
+                if (!_data->STOPPED){
+                    _data->STOPPED = true;
                 }
-                
-            
+
+                _stopStream();
             } 
 
             if ( _cmd == Bus::Command::PAUSE_PLAY ){
-                
 
-                if (_PLAYING_SIG){
+                if (!_data->STOPPED){
                     _logger->debug("run() - cmd == Bus::Command::PAUSE_PLAY, PAUSING");
-                    // _data->STOP_SIGNALLED = true;
-                    // Pa_Sleep(100);
-                    // // stop stream from Callback
-                    _stopStream();
+                    _data->STOPPED = true;
                 } else {
                     _logger->debug("run() - cmd == Bus::Command::PAUSE_PLAY, PLAYING");
-                    // _data->STOP_SIGNALLED = false;
-                    _startStream();
+                    _data->STOPPED = false;
                 }
             }
-        }
 
-        Pa_Sleep(500);
+        }
     }
 
     _closeStream();
@@ -243,7 +221,6 @@ void AudioEngine::_startStream(){
 
     _logger->debug("AudioEngine::_startStream()");
     PaError e = Pa_StartStream(stream);
-    _PLAYING_SIG = true;
 
     if (e != paNoError){
         std::string msg = Pa_GetErrorText( e );
@@ -256,7 +233,6 @@ void AudioEngine::_stopStream(){
 
     _logger->debug("AudioEngine::_stopStream()");
     PaError e = Pa_StopStream(stream);
-    _PLAYING_SIG = false;
 
     if (e != paNoError){
         std::string msg = Pa_GetErrorText( e );
@@ -306,3 +282,51 @@ void AudioEngine::registerQueues(
     this->_queues_ptr = q_ptr;
     _data->_q_ptr = q_ptr;
 }
+
+
+
+
+/***************
+*   Utilities  *
+***************/
+
+/***
+ *     Example -> 5 Frames in Buffer
+ *     1
+*        ............
+ *                   ............
+                                 ............
+                                             ............
+                                                         ............                            
+ *      ______________________________________________________________0
+ * 
+ * 
+*/
+void AudioEngine::_applyFadeOut( float *samples_arr, int channels, int frames_in_buffer ){
+
+    float fade_out_slope = 1 / frames_in_buffer;
+
+    for (int i = 0; i < frames_in_buffer; i++){
+        
+        float table_val = 1 - (fade_out_slope * i);
+        
+        samples_arr[2*i] *= table_val;
+        samples_arr[(2*i) + 1] *= table_val;
+    }
+}
+
+std::string AudioEngine::_arrayToString(float *arr, int len){
+    std::string retval = "";
+    for (int i=0;i<len;i++){
+
+        retval += std::to_string(i) + ": ";
+        retval += std::to_string(arr[i]);
+
+        if (i != len - 1 ){
+            retval += "; ";
+        }
+    }
+    return retval;
+}
+
+

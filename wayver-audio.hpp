@@ -27,6 +27,9 @@ namespace Wayver {
 
     namespace Audio {
 
+
+
+
         /***
          * Object that is passed to paCallback,
          * used to exchange data between Audio Thread
@@ -53,7 +56,9 @@ namespace Wayver {
 
             std::shared_ptr<spdlog::logger> _logger;
 
-            bool STOP_SIGNALLED = false;
+
+            // set to true when stopping -> avoid pop
+            bool STOPPED = false;
         };
 
         /***
@@ -73,7 +78,6 @@ namespace Wayver {
                 Bus::Queues *_queues_ptr;
 
                 bool _QUIT_SIG = false;
-                bool _PLAYING_SIG = false;
 
                 static int _paStreamCallback( 
                     const void *inputBuffer,
@@ -90,6 +94,10 @@ namespace Wayver {
                 void _stopStream();
                 
                 void _closeFile();
+
+                // Utility
+                static void _applyFadeOut( float *samples_arr, int channels, int frames_in_buffer );
+                static std::string _arrayToString(float *array, int length);
 
             public:
 
