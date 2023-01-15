@@ -54,13 +54,14 @@ void AudioEngine::loadFile( const std::string& path){
     _logger->flush();
 }
 
+/*static*/
 int AudioEngine::_paStreamCallback(
     const void *input
     ,void *output /* The data sent to the Audio Device */
     ,unsigned long frameCount /* frames in buffer - samples / channels */
     ,const PaStreamCallbackTimeInfo *timeInfo
     ,PaStreamCallbackFlags statusFlags
-    ,void *userData
+    ,void *userData 
 ){
 
     float *out;
@@ -69,14 +70,18 @@ int AudioEngine::_paStreamCallback(
 
     out = (float*)output;
     p_data = (InternalAudioData*)userData;
+
+    const int buffer_length = frameCount * p_data->info.channels;
     /* clear output buffer */
-    memset(out, 0, sizeof(float) * frameCount * p_data->info.channels);
+    memset( out, 0, sizeof(float) * buffer_length );
     
     if (!p_data->STOPPED){
 
         // write silence;
         /* read directly into output buffer */
-        num_read = sf_read_float(p_data->file, out, frameCount * p_data->info.channels);
+        num_read = sf_read_float(p_data->file, out, buffer_length );
+
+        _applyGain(p_data->GAIN, out, buffer_length);
 
         p_data->readHead += (num_read / p_data->info.channels);
         p_data->_q_ptr->head = p_data->readHead;
@@ -155,6 +160,7 @@ void AudioEngine::run(){
     _openStream();
     _startStream();
     
+    bool _QUIT_SIG = false;
     
     /* Main Event Loop */
     while (!_QUIT_SIG){
@@ -173,9 +179,7 @@ void AudioEngine::run(){
                 }
 
                 _stopStream();
-            } 
-
-            if ( _cmd == Bus::Command::PAUSE_PLAY ){
+            } else if ( _cmd == Bus::Command::PAUSE_PLAY ){
 
                 if (!_data->STOPPED){
                     _logger->debug("run() - cmd == Bus::Command::PAUSE_PLAY, PAUSING");
@@ -184,7 +188,12 @@ void AudioEngine::run(){
                     _logger->debug("run() - cmd == Bus::Command::PAUSE_PLAY, PLAYING");
                     _data->STOPPED = false;
                 }
+            
+            } else if ( _cmd == Bus::Command::NUDGE_GAIN_DWN || _cmd == Bus::Command::NUDGE_GAIN_UP ){
+                _nudgeGain( _cmd == Bus::Command::NUDGE_GAIN_DWN );
             }
+
+
 
         }
     }
@@ -283,7 +292,15 @@ void AudioEngine::registerQueues(
     _data->_q_ptr = q_ptr;
 }
 
-
+void AudioEngine::_nudgeGain( bool DOWN ){
+    if ( !DOWN && _data->GAIN < 1 ){
+        _logger->debug("_nudgeGain UP - current: {}", _data->GAIN );
+        _data->GAIN += _GAIN_STEP;
+    } else if ( DOWN ) {
+        _logger->debug("_nudgeGain DWN - current: {}", _data->GAIN );
+        _data->GAIN -= _GAIN_STEP;
+    }
+}
 
 
 /***************
@@ -302,6 +319,7 @@ void AudioEngine::registerQueues(
  * 
  * 
 */
+/*static*/
 void AudioEngine::_applyFadeOut( float *samples_arr, int channels, int frames_in_buffer ){
 
     float fade_out_slope = 1 / frames_in_buffer;
@@ -315,6 +333,7 @@ void AudioEngine::_applyFadeOut( float *samples_arr, int channels, int frames_in
     }
 }
 
+/*static*/
 std::string AudioEngine::_arrayToString(float *arr, int len){
     std::string retval = "";
     for (int i=0;i<len;i++){
@@ -329,4 +348,10 @@ std::string AudioEngine::_arrayToString(float *arr, int len){
     return retval;
 }
 
-
+/*static*/
+void AudioEngine::_applyGain( float gain, float *arr, int size ){
+    assert(gain<=1);
+    for (int i=0;i<size;i++){
+        arr[i] = gain * arr[i];
+    }
+}

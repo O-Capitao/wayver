@@ -27,9 +27,6 @@ namespace Wayver {
 
     namespace Audio {
 
-
-
-
         /***
          * Object that is passed to paCallback,
          * used to exchange data between Audio Thread
@@ -37,10 +34,7 @@ namespace Wayver {
         */
         struct InternalAudioData {
 
-            InternalAudioData(
-                const std::string &path
-            );
-
+            InternalAudioData( const std::string &path );
             ~InternalAudioData();
 
             SNDFILE* file = NULL;
@@ -51,14 +45,13 @@ namespace Wayver {
 
             /* Frames read */
             int readHead = 0;
-
             Bus::Queues *_q_ptr = NULL;
-
             std::shared_ptr<spdlog::logger> _logger;
-
 
             // set to true when stopping -> avoid pop
             bool STOPPED = false;
+
+            float GAIN = 1;
         };
 
         /***
@@ -74,10 +67,7 @@ namespace Wayver {
                 InternalAudioData* _data = NULL;
                 PaStream *stream = NULL;
                 std::shared_ptr<spdlog::logger> _logger;
-
                 Bus::Queues *_queues_ptr;
-
-                bool _QUIT_SIG = false;
 
                 static int _paStreamCallback( 
                     const void *inputBuffer,
@@ -95,25 +85,27 @@ namespace Wayver {
                 
                 void _closeFile();
 
+                const float _GAIN_STEP = 0.1;
+                void _nudgeGain( bool DOWN = true );
+
+
+
                 // Utility
                 static void _applyFadeOut( float *samples_arr, int channels, int frames_in_buffer );
                 static std::string _arrayToString(float *array, int length);
+                static void _applyGain( float gain, float *arr, int size );
 
             public:
 
                 AudioEngine();
-                
                 ~AudioEngine();
 
                 // Player Actions
                 void loadFile(const std::string& path);
                 void registerQueues(Bus::Queues *_q_ptr);
 
-                // void closeFile(); 
-
                 // Audio Thread
                 void run();
-                // void pauseFile();
 
                 const SF_INFO &getSoundFileInfo();    
         };

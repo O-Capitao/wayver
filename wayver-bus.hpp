@@ -10,7 +10,9 @@ namespace Wayver {
         enum Command {
             PAUSE_PLAY,
             STOP,
-            QUIT
+            QUIT,
+            NUDGE_GAIN_UP,
+            NUDGE_GAIN_DWN
         };
 
         struct Queues {

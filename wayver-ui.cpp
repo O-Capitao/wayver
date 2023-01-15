@@ -282,9 +282,7 @@ void WayverUi::_handleEvents(){
 
     // take care of throttle_counter;
     if (_throttleActive && ((SDL_GetTicks() - _throttleTimer_start) >= _THROTTLE_TIME_MS)){
-
         _throttleActive = false;
-
     }
     
     SDL_Event e;
@@ -317,8 +315,22 @@ void WayverUi::_handleEvents(){
                         _throttleActive = true;
                         _throttleTimer_start = SDL_GetTicks();
                     }
-                    
                     break;
+
+                case SDLK_DOWN:
+                    if (!_throttleActive){
+                        _queues_ptr->_queue_commands.push( Bus::Command::NUDGE_GAIN_DWN );
+                        _throttleActive = true;
+                        _throttleTimer_start = SDL_GetTicks();
+                    }
+                    break;
+                
+                case SDLK_UP:
+                    if (!_throttleActive){
+                        _queues_ptr->_queue_commands.push( Bus::Command::NUDGE_GAIN_UP );
+                        _throttleActive = true;
+                        _throttleTimer_start = SDL_GetTicks();
+                    }
                 default:
                     break;
                 }
