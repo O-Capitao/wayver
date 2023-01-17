@@ -46,6 +46,13 @@ WayverUi::WayverUi()
         _globals._WIN_SIZE.y - _scrubber_rect.h - _scrubber_rect.y - _globals._PADDING 
     };
 
+    _help_rect = {
+        0,
+        0,
+        _globals._WIN_SIZE.x,
+        _globals._WIN_SIZE.y
+    };
+
     _logger->info("Constructed");
     _logger->flush();    
 }
@@ -55,9 +62,10 @@ WayverUi::WayverUi()
 
 
 
-WayverUi::~WayverUi(){
-    
+WayverUi::~WayverUi()
+{    
     delete _scrubber;
+    delete _help_component;
 
     //Destroy window	
 	SDL_DestroyRenderer( renderer );
@@ -83,10 +91,8 @@ WayverUi::~WayverUi(){
 */
 void WayverUi::initUiState(
     Bus::Queues *_q_ptr,
-    const SF_INFO &info
-)
+    const SF_INFO &info )
 {
-    
     this->_sfInfo = info;
     this->_n_samples_in = info.channels * _n_frames_per_buffer;
     this->_samples_in_vec.reserve( _n_samples_in );
@@ -137,7 +143,15 @@ void WayverUi::initWindow(){
     _scrubber = new Scrubber(
         _scrubber_rect,
         renderer,
+        _logger,
         _sfInfo,
+        body_font
+    );
+
+    _help_component = new Help(
+        _help_rect,
+        renderer,
+        _logger,
         body_font
     );
 
@@ -247,11 +261,8 @@ void WayverUi::_draw(){
     
     SDL_RenderClear( renderer );
 
-    // _draw_Spectrum();
-    // _draw_Info();
     _scrubber->draw();
-    // _draw_sampleCounter();
-    
+    _help_component->draw();    
 
     SDL_RenderPresent(renderer);
 }
@@ -331,6 +342,13 @@ void WayverUi::_handleEvents(){
                         _throttleActive = true;
                         _throttleTimer_start = SDL_GetTicks();
                     }
+                case SDLK_h:
+                    if (!_throttleActive){
+                        _logger -> debug("SDL_k pressed");
+                        _help_component->toggle();
+                        _throttleActive = true;
+                        _throttleTimer_start = SDL_GetTicks();
+                    }
                 default:
                     break;
                 }
@@ -347,65 +365,65 @@ void WayverUi::_handleEvents(){
 */
 UIComponent::UIComponent(
     const SDL_Rect &contentRect, 
-    SDL_Renderer *r
-)
-:
-_renderer(r),
-_content_rect(contentRect)
+    SDL_Renderer *r,
+    std::shared_ptr<spdlog::logger> logger
+):_renderer(r),
+_content_rect(contentRect),
+_logger(logger)
 {}
 
 // UIComponent::~UIComponent(){}
 
-Spectrum::Spectrum(
-    const SDL_Rect &contentRect,
-    SDL_Renderer *r,
-    int n_grid_x_divisions ,
-    float min_x,
-    float max_x
-):
-UIComponent(contentRect, r),
-_min_x_value(min_x),
-_max_x_value(max_x)
-{
+// Spectrum::Spectrum(
+//     const SDL_Rect &contentRect,
+//     SDL_Renderer *r,
+//     int n_grid_x_divisions ,
+//     float min_x,
+//     float max_x
+// ):
+// UIComponent(contentRect, r),
+// _min_x_value(min_x),
+// _max_x_value(max_x)
+// {
 
-    // gen grid lines
-    float grid_x_length = _max_x_value - _min_x_value;
-    float grid_x_length_exp = log10f( grid_x_length );
-    float delta_exp = grid_x_length_exp / (float)n_grid_x_divisions;
+//     // gen grid lines
+//     float grid_x_length = _max_x_value - _min_x_value;
+//     float grid_x_length_exp = log10f( grid_x_length );
+//     float delta_exp = grid_x_length_exp / (float)n_grid_x_divisions;
 
-    // 1st x grid point is at lower bound,
-    // from there on:
-    //      2nd point -> lower_bound + 10^(delta_exp)
-    //      3rd pont -> lower_bound + 10^(2 * delta_exp)
-    //      and so on...
-    for ( int i = 0; i < n_grid_x_divisions; i++ ){
+//     // 1st x grid point is at lower bound,
+//     // from there on:
+//     //      2nd point -> lower_bound + 10^(delta_exp)
+//     //      3rd pont -> lower_bound + 10^(2 * delta_exp)
+//     //      and so on...
+//     for ( int i = 0; i < n_grid_x_divisions; i++ ){
 
-        _x_axis_grid_divisions.push_back(_min_x_value + (i * delta_exp) );
+//         _x_axis_grid_divisions.push_back(_min_x_value + (i * delta_exp) );
         
-        grid_lines.push_back({
-            .pa = { ((float)i/(float)n_grid_x_divisions), 0 },
-            .pb = { ((float)i/(float)n_grid_x_divisions), 1 }
-        });
+//         grid_lines.push_back({
+//             .pa = { ((float)i/(float)n_grid_x_divisions), 0 },
+//             .pb = { ((float)i/(float)n_grid_x_divisions), 1 }
+//         });
 
-    }
+//     }
 
-}
+// }
 
-void Spectrum::draw(){}
+// void Spectrum::draw(){}
 
-SDL_FPoint Spectrum::point_toWindowCoords(const SDL_FPoint &_p){
-    return {
-        _p.x*_spectrumBox_inCanvas.w + _spectrumBox_inCanvas.x,
-        _p.y*_spectrumBox_inCanvas.h + _spectrumBox_inCanvas.y
-    };
-}
+// SDL_FPoint Spectrum::point_toWindowCoords(const SDL_FPoint &_p){
+//     return {
+//         _p.x*_spectrumBox_inCanvas.w + _spectrumBox_inCanvas.x,
+//         _p.y*_spectrumBox_inCanvas.h + _spectrumBox_inCanvas.y
+//     };
+// }
 
-SDL_FLine Spectrum::line_toWindowCoords ( const SDL_FLine &_line ){
-    return {
-        point_toWindowCoords(_line.pa),
-        point_toWindowCoords(_line.pb)
-    };
-}
+// SDL_FLine Spectrum::line_toWindowCoords ( const SDL_FLine &_line ){
+//     return {
+//         point_toWindowCoords(_line.pa),
+//         point_toWindowCoords(_line.pb)
+//     };
+// }
 
 
 
@@ -438,9 +456,10 @@ SDL_FLine Spectrum::line_toWindowCoords ( const SDL_FLine &_line ){
 Scrubber::Scrubber(
     const SDL_Rect &contentRect,
     SDL_Renderer *r,
+    std::shared_ptr<spdlog::logger> logger,
     const SF_INFO &sfi,
     TTF_Font *f
-):UIComponent(contentRect, r),
+):UIComponent(contentRect, r, logger),
 _font(f)
 {
     _logger = spdlog::basic_logger_mt("UI::Scrubber", "wayver.log");
@@ -584,27 +603,110 @@ void Scrubber::_draw_TimeText(){
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/**
- * Static Info
+/***
+ * Help
 */
-StaticInfo::StaticInfo(
+Help::Help(
     const SDL_Rect &contentRect,
-    SDL_Renderer *r
-):UIComponent(contentRect, r)
-{}
+    SDL_Renderer *r,
+    std::shared_ptr<spdlog::logger> logger,
+    TTF_Font *f )
+:UIComponent(contentRect, r, logger),
+_font(f)
+{
+    _help_rect = {
+        (float)_content_rect.x + 100,
+        (float)_content_rect.y + 100,
+        (float)_content_rect.w - 200,
+        8
+    };
 
-void StaticInfo::draw(){}
+}
+
+
+void Help::toggle(){
+    _visible = !_visible;
+}
+
+void Help::draw(){
+
+    if (_visible){
+
+        SDL_SetRenderDrawColor(
+            _renderer,
+            globals._BACKGROUND_1.r,
+            globals._BACKGROUND_1.g,
+            globals._BACKGROUND_1.b,
+            globals._BACKGROUND_1.a );
+
+        SDL_RenderFillRectF( _renderer, &_help_rect );
+
+        SDL_SetRenderDrawColor(
+            _renderer,
+            globals._FOREGROUND_1.r,
+            globals._FOREGROUND_1.g,
+            globals._FOREGROUND_1.b,
+            globals._FOREGROUND_1.a );
+
+        SDL_Surface* text_surface;
+
+        text_surface = TTF_RenderText_Shaded( 
+            _font, 
+            _text.c_str(), 
+            globals._FOREGROUND_2,
+            globals._BACKGROUND_1 );
+                
+        SDL_Texture* text_texture;
+        _logger->debug("Help:: draw, phase 1");
+        _logger->flush();
+
+        text_texture = SDL_CreateTextureFromSurface( _renderer, 
+            text_surface );
+        
+        _logger->debug("Help:: draw, created texture");
+        _logger->flush();
+
+        SDL_Rect src = {
+            0,0,text_surface->w, text_surface->h
+        };
+
+        SDL_Rect dest = { 
+            (int)floor(_help_rect.x),
+            (int)floor(_help_rect.y),
+            text_surface->w, 
+            text_surface->h
+        };
+
+        _logger->debug("Help:: draw, created re");
+        _logger->flush();
+
+        SDL_RenderCopy( _renderer, text_texture, &src, &dest );
+        _logger->debug("Help:: draw, phase 5");
+        _logger->flush();
+        // cleanup
+        SDL_DestroyTexture( text_texture );
+        SDL_FreeSurface( text_surface );
+        
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+// /**
+//  * Static Info
+// */
+// StaticInfo::StaticInfo(
+//     const SDL_Rect &contentRect,
+//     SDL_Renderer *r
+// ):UIComponent(contentRect, r)
+// {}
+
+// void StaticInfo::draw(){}

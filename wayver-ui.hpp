@@ -38,6 +38,7 @@ namespace Wayver {
 
             protected:
                 SDL_Renderer *_renderer = NULL;
+                std::shared_ptr<spdlog::logger> _logger;
 
             public:
                 SDL_Rect _content_rect;
@@ -46,7 +47,8 @@ namespace Wayver {
 
                 UIComponent(
                     const SDL_Rect &contentRect,
-                    SDL_Renderer *r
+                    SDL_Renderer *r,
+                    std::shared_ptr<spdlog::logger> logger
                 );
 
                 // ~UIComponent();
@@ -62,6 +64,31 @@ namespace Wayver {
 
         // UI Components
 
+        /**
+         * HELP panel
+        */
+       class Help: public UIComponent {
+
+            bool _visible = false;
+
+            TTF_Font *_font;
+            SDL_FRect _help_rect;
+            
+            const std::string _text = 
+                "Q - Quit    SPACE - Play/Pause    ARROW UP/DWN - Volume";
+            
+            public:
+                Help(
+                    const SDL_Rect &contentRect,
+                    SDL_Renderer *r,
+                    std::shared_ptr<spdlog::logger> logger,
+                    TTF_Font *f
+                );
+
+                void draw();
+                void toggle();
+
+       };
 
         /***
          * SCRUBBER
@@ -92,6 +119,7 @@ namespace Wayver {
                 Scrubber(
                     const SDL_Rect &contentRect,
                     SDL_Renderer *r,
+                    std::shared_ptr<spdlog::logger> logger,
                     const SF_INFO &sfi,
                     TTF_Font *f
                 );
@@ -173,6 +201,7 @@ namespace Wayver {
             SDL_Rect _spectrum_rect;
             SDL_Rect _scrubber_rect;
             SDL_Rect _info_rect;
+            SDL_Rect _help_rect;
 
             SF_INFO _sfInfo;
             
@@ -200,7 +229,7 @@ namespace Wayver {
             // spectogram grid
             // Spectrum *_spectrum = NULL;
             Scrubber *_scrubber = NULL;
-
+            Help *_help_component = NULL;
 
             // private initializations
             void _initFonts();
