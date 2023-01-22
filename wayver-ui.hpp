@@ -51,8 +51,6 @@ namespace Wayver {
                     std::shared_ptr<spdlog::logger> logger
                 );
 
-                // ~UIComponent();
-
                 void draw();
         };
 
@@ -62,8 +60,47 @@ namespace Wayver {
         };
 
 
-        // UI Components
 
+
+        class Label: public UIComponent {
+
+            std::string _content;
+            TTF_Font *_font;
+            SDL_Color _bg_color,
+             _fg_color;
+            
+            SDL_Point _position;
+            SDL_Rect _src, _tgt;
+            bool _isVisible = true;
+
+            SDL_Surface *_surface = NULL;
+            SDL_Texture *_texture = NULL;
+
+            public:
+                // gets initted with "" as contents
+                // only shows text after updateContents()
+                Label(
+                    const SDL_Rect &contentRect,
+                    SDL_Renderer *r,
+                    std::shared_ptr<spdlog::logger> logger,
+                    TTF_Font *font,
+                    SDL_Color bg_color,
+                    SDL_Color fg_color,
+                    SDL_Point position
+                );
+
+                ~Label();
+
+                void draw();
+                void updateContents( const std::string &_newContents );
+                void toggleVisibility();
+
+        };
+
+
+
+
+        // UI Components
         /**
          * HELP panel
         */
@@ -89,6 +126,10 @@ namespace Wayver {
                 void toggle();
 
        };
+
+
+
+
 
         /***
          * SCRUBBER
@@ -135,18 +176,29 @@ namespace Wayver {
 
 
 
-
-
-
-
-
-
+        /**
+         * Static info - show some labels
+         * describing the file, slow - changing info
+        */
         class StaticInfo : public UIComponent{
+
+            Label _filename_label,
+            _channels_label,
+            _framerate_label;
+
             public:
                 StaticInfo(
                     const SDL_Rect &contentRect,
-                    SDL_Renderer *r
+                    SDL_Renderer *r,
+                    std::shared_ptr<spdlog::logger> logger,
+                    const SF_INFO &sfi,
+                    const std::string &filename,
+                    SDL_Color bg_color,
+                    SDL_Color fg_color,
+                    TTF_Font *small_font,
+                    TTF_Font *lrg_font
                 );
+
                 void draw();
         };
 
@@ -183,6 +235,17 @@ namespace Wayver {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
         class WayverUi {
 
             Globals _globals;
@@ -204,6 +267,7 @@ namespace Wayver {
             SDL_Rect _help_rect;
 
             SF_INFO _sfInfo;
+            std::string path_to_file;
             
             // init frames counter to 0
             int _frames_counter = 0;
@@ -230,6 +294,7 @@ namespace Wayver {
             // Spectrum *_spectrum = NULL;
             Scrubber *_scrubber = NULL;
             Help *_help_component = NULL;
+            StaticInfo *_static_info = NULL;
 
             // private initializations
             void _initFonts();
@@ -252,7 +317,8 @@ namespace Wayver {
                 // public inits -> called from main
                 void initUiState(
                     Bus::Queues *_q_ptr,
-                    const SF_INFO &info
+                    const SF_INFO &info,
+                     const std::string &fpath 
                 );
 
                 void setSfInfo( const SF_INFO &sfi);

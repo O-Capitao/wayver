@@ -11,12 +11,17 @@ InternalAudioData::InternalAudioData(
     const std::string &p
 ):file(sf_open( p.c_str(), SFM_READ, &info)),
 _logger(spdlog::basic_logger_mt("AUDIO INTERNAL", "wayver.log"))
-{
-}
+{}
 
-InternalAudioData::~InternalAudioData(){
-}
+InternalAudioData::~InternalAudioData(){}
 
+
+
+
+/**
+ * Audio Engine - portaudio
+ * core
+*/
 AudioEngine::AudioEngine()
 :_logger(spdlog::basic_logger_mt("AUDIO ENGINE", "wayver.log"))
 {
@@ -192,9 +197,6 @@ void AudioEngine::run(){
             } else if ( _cmd == Bus::Command::NUDGE_GAIN_DWN || _cmd == Bus::Command::NUDGE_GAIN_UP ){
                 _nudgeGain( _cmd == Bus::Command::NUDGE_GAIN_DWN );
             }
-
-
-
         }
     }
 
@@ -203,8 +205,8 @@ void AudioEngine::run(){
 
 }
 
-void AudioEngine::_openStream(){
-
+void AudioEngine::_openStream()
+{
     _logger->debug("AudioEngine::_openStream()");
 
     PaError e = Pa_OpenDefaultStream(
@@ -223,11 +225,10 @@ void AudioEngine::_openStream(){
         _logger->error( "Error opening stream. msg; {}", msg );
         throw std::runtime_error("Could not Open stream.");
     }
-
 }
 
-void AudioEngine::_startStream(){
-
+void AudioEngine::_startStream()
+{
     _logger->debug("AudioEngine::_startStream()");
     PaError e = Pa_StartStream(stream);
 
@@ -238,8 +239,8 @@ void AudioEngine::_startStream(){
     }
 }
 
-void AudioEngine::_stopStream(){
-
+void AudioEngine::_stopStream()
+{
     _logger->debug("AudioEngine::_stopStream()");
     PaError e = Pa_StopStream(stream);
 
@@ -250,7 +251,8 @@ void AudioEngine::_stopStream(){
     }
 }
 
-void AudioEngine::_closeStream(){
+void AudioEngine::_closeStream()
+{
     _logger->debug("AudioEngine::_closeStream()");
     PaError e = Pa_CloseStream(stream);
 
@@ -281,18 +283,24 @@ void AudioEngine::_closeFile()
 }
 
 
-const SF_INFO &AudioEngine::getSoundFileInfo(){
+const SF_INFO &AudioEngine::getSoundFileInfo()
+{
     return _data->info;
 }
 
-void AudioEngine::registerQueues( 
-    Bus::Queues *q_ptr
-){
+const std::string &AudioEngine::getPathToFile()
+{
+    return _data->file_path;
+}
+
+void AudioEngine::registerQueues( Bus::Queues *q_ptr )
+{
     this->_queues_ptr = q_ptr;
     _data->_q_ptr = q_ptr;
 }
 
-void AudioEngine::_nudgeGain( bool DOWN ){
+void AudioEngine::_nudgeGain( bool DOWN )
+{
     if ( !DOWN && _data->GAIN < 1 ){
         _logger->debug("_nudgeGain UP - current: {}", _data->GAIN );
         _data->GAIN += _GAIN_STEP;
@@ -320,8 +328,8 @@ void AudioEngine::_nudgeGain( bool DOWN ){
  * 
 */
 /*static*/
-void AudioEngine::_applyFadeOut( float *samples_arr, int channels, int frames_in_buffer ){
-
+void AudioEngine::_applyFadeOut( float *samples_arr, int channels, int frames_in_buffer )
+{
     float fade_out_slope = 1 / frames_in_buffer;
 
     for (int i = 0; i < frames_in_buffer; i++){

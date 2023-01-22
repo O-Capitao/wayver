@@ -66,6 +66,7 @@ WayverUi::~WayverUi()
 {    
     delete _scrubber;
     delete _help_component;
+    delete _static_info;
 
     //Destroy window	
 	SDL_DestroyRenderer( renderer );
@@ -78,7 +79,6 @@ WayverUi::~WayverUi()
 
     TTF_Quit();
 	SDL_Quit();
-
 }
 
 
@@ -91,12 +91,14 @@ WayverUi::~WayverUi()
 */
 void WayverUi::initUiState(
     Bus::Queues *_q_ptr,
-    const SF_INFO &info )
+    const SF_INFO &info,
+    const std::string &fpath )
 {
     this->_sfInfo = info;
     this->_n_samples_in = info.channels * _n_frames_per_buffer;
     this->_samples_in_vec.reserve( _n_samples_in );
     this->_queues_ptr = _q_ptr;
+    this->path_to_file = fpath;
 
     _logger->debug("Finished Constructor");
     _logger->flush();
@@ -154,6 +156,18 @@ void WayverUi::initWindow(){
         _logger,
         body_font
     );
+    
+    _static_info = new StaticInfo(
+        _info_rect,
+        renderer,
+        _logger,
+        _sfInfo,
+        path_to_file,
+        _globals._BACKGROUND_1,
+        _globals._FOREGROUND_1,
+        body_font,
+        title_font
+    );
 
     _logger->debug("initWindow()");
     _logger->flush();
@@ -192,8 +206,6 @@ void WayverUi::_initFonts(){
  * Runtime
 */
 void WayverUi::run(){
-    _logger->debug("Starting run()");
-    _logger->flush();
 
     // initWindow();
     // std::vector<float> *frames = new std::vector<float>();
@@ -212,24 +224,12 @@ void WayverUi::run(){
         // int items_in_queue = _queues_ptr->_queue_audio_to_ui.read_available();
         _frames_counter = _queues_ptr->head;
         
-
-        // consume_pending();
-
-        // if (items_in_queue > 0){
-        //     _logger->debug("consumed pending.");
-        //     _logger->flush();
-        // }
-        
-        
         _update();
-
         _draw();
 
         boost::this_thread::sleep_for( boost::chrono::milliseconds( UI_WAIT_TIME ) );
     }
 
-    // frames->empty();
-    // delete frames;
     _logger->debug("Exiting run()");
     _logger->flush();
 }
@@ -262,7 +262,8 @@ void WayverUi::_draw(){
     SDL_RenderClear( renderer );
 
     _scrubber->draw();
-    _help_component->draw();    
+    _help_component->draw();
+    _static_info->draw();
 
     SDL_RenderPresent(renderer);
 }
@@ -372,82 +373,6 @@ _content_rect(contentRect),
 _logger(logger)
 {}
 
-// UIComponent::~UIComponent(){}
-
-// Spectrum::Spectrum(
-//     const SDL_Rect &contentRect,
-//     SDL_Renderer *r,
-//     int n_grid_x_divisions ,
-//     float min_x,
-//     float max_x
-// ):
-// UIComponent(contentRect, r),
-// _min_x_value(min_x),
-// _max_x_value(max_x)
-// {
-
-//     // gen grid lines
-//     float grid_x_length = _max_x_value - _min_x_value;
-//     float grid_x_length_exp = log10f( grid_x_length );
-//     float delta_exp = grid_x_length_exp / (float)n_grid_x_divisions;
-
-//     // 1st x grid point is at lower bound,
-//     // from there on:
-//     //      2nd point -> lower_bound + 10^(delta_exp)
-//     //      3rd pont -> lower_bound + 10^(2 * delta_exp)
-//     //      and so on...
-//     for ( int i = 0; i < n_grid_x_divisions; i++ ){
-
-//         _x_axis_grid_divisions.push_back(_min_x_value + (i * delta_exp) );
-        
-//         grid_lines.push_back({
-//             .pa = { ((float)i/(float)n_grid_x_divisions), 0 },
-//             .pb = { ((float)i/(float)n_grid_x_divisions), 1 }
-//         });
-
-//     }
-
-// }
-
-// void Spectrum::draw(){}
-
-// SDL_FPoint Spectrum::point_toWindowCoords(const SDL_FPoint &_p){
-//     return {
-//         _p.x*_spectrumBox_inCanvas.w + _spectrumBox_inCanvas.x,
-//         _p.y*_spectrumBox_inCanvas.h + _spectrumBox_inCanvas.y
-//     };
-// }
-
-// SDL_FLine Spectrum::line_toWindowCoords ( const SDL_FLine &_line ){
-//     return {
-//         point_toWindowCoords(_line.pa),
-//         point_toWindowCoords(_line.pb)
-//     };
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /***
@@ -467,9 +392,9 @@ _font(f)
     _sf_info = sfi;
 
     _scrub_bar_rect_outer = {
-        (float)_content_rect.x + 10,
-        (float)_content_rect.y + 10,
-        (float)_content_rect.w - 20,
+        (float)_content_rect.x,
+        (float)_content_rect.y,
+        (float)_content_rect.w,
         8
     };
 
@@ -536,7 +461,6 @@ void Scrubber::draw(){
         globals._FOREGROUND_1.a
     );
 
-    SDL_RenderDrawRect( _renderer, &_content_rect );
     SDL_RenderFillRectF( _renderer, &_scrub_bar_rect_outer );
 
     SDL_SetRenderDrawColor(
@@ -657,14 +581,9 @@ void Help::draw(){
             globals._BACKGROUND_1 );
                 
         SDL_Texture* text_texture;
-        _logger->debug("Help:: draw, phase 1");
-        _logger->flush();
 
         text_texture = SDL_CreateTextureFromSurface( _renderer, 
             text_surface );
-        
-        _logger->debug("Help:: draw, created texture");
-        _logger->flush();
 
         SDL_Rect src = {
             0,0,text_surface->w, text_surface->h
@@ -677,12 +596,8 @@ void Help::draw(){
             text_surface->h
         };
 
-        _logger->debug("Help:: draw, created re");
-        _logger->flush();
-
         SDL_RenderCopy( _renderer, text_texture, &src, &dest );
-        _logger->debug("Help:: draw, phase 5");
-        _logger->flush();
+        
         // cleanup
         SDL_DestroyTexture( text_texture );
         SDL_FreeSurface( text_surface );
@@ -696,17 +611,95 @@ void Help::draw(){
 
 
 
+// LAbel
+Label::Label(
+    const SDL_Rect &contentRect,
+    SDL_Renderer *r,
+    std::shared_ptr<spdlog::logger> logger,
+    TTF_Font *font,
+    SDL_Color bg_color,
+    SDL_Color fg_color,
+    SDL_Point position
+):UIComponent(contentRect, r, logger),
+_font(font),
+_content(""),
+_fg_color(fg_color),
+_bg_color(bg_color),
+_position(position)
+{
+}
+
+Label::~Label(){
+    SDL_DestroyTexture( _texture );
+    SDL_FreeSurface( _surface );
+}
+
+void Label::draw(){
+    if (_isVisible){
+        SDL_RenderCopy( _renderer, _texture, &_src, &_tgt );
+    }
+}
+
+void Label::updateContents( const std::string &_newContents ){
+
+    if (_surface != NULL){
+        SDL_DestroyTexture( _texture );
+        SDL_FreeSurface( _surface );
+    }
+
+    _surface = TTF_RenderText_Shaded( 
+        _font, 
+        _newContents.c_str(), 
+        _fg_color,
+        _bg_color );
+    
+    _texture = SDL_CreateTextureFromSurface( _renderer, 
+        _surface );
+
+    _src =  {
+        0,0,_surface->w, _surface->h
+    };
+
+    _tgt = {
+        (int)floor(_position.x),
+        (int)floor(_position.y),
+        _surface->w, 
+        _surface->h
+    };
+}
+
+void Label::toggleVisibility(){
+    _isVisible = !_isVisible;
+}
 
 
 
 
-// /**
-//  * Static Info
-// */
-// StaticInfo::StaticInfo(
-//     const SDL_Rect &contentRect,
-//     SDL_Renderer *r
-// ):UIComponent(contentRect, r)
-// {}
+/****
+ * StaticInfo contents
+*/
+StaticInfo::StaticInfo(
+    const SDL_Rect &contentRect,
+    SDL_Renderer *r,
+    std::shared_ptr<spdlog::logger> logger,
+    const SF_INFO &sfi,
+    const std::string &filename,
+    SDL_Color bg_color,
+    SDL_Color fg_color,
+    TTF_Font *small_font,
+    TTF_Font *lrg_font
+):UIComponent(contentRect, r, logger),
+_filename_label( contentRect, r, logger, lrg_font, bg_color, fg_color, {contentRect.x, contentRect.y}),
+_channels_label( contentRect, r, logger, small_font, bg_color, fg_color, {contentRect.x, contentRect.y + 150} ),
+_framerate_label( contentRect, r, logger, small_font, bg_color, fg_color, {contentRect.x, contentRect.y + 200})
+{
+    _filename_label.updateContents(filename);
+    _channels_label.updateContents( "Channels: " + std::to_string(sfi.channels) );
+    _framerate_label.updateContents( "Sample Rate: " + std::to_string( sfi.samplerate ) + " Hz" );
+}
 
-// void StaticInfo::draw(){}
+void StaticInfo::draw(){
+    _filename_label.draw();
+    _channels_label.draw();
+    _framerate_label.draw();
+}

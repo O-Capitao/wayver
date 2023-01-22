@@ -39,7 +39,6 @@ namespace Wayver {
 
             SNDFILE* file = NULL;
             SF_INFO  info;
-            SF_FORMAT_INFO format;
 
             std::string file_path;
 
@@ -107,7 +106,8 @@ namespace Wayver {
                 // Audio Thread
                 void run();
 
-                const SF_INFO &getSoundFileInfo();    
+                const SF_INFO &getSoundFileInfo(); 
+                const std::string &getPathToFile();
         };
 
     }

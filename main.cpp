@@ -51,7 +51,8 @@ int main(int argc, char *argv[])
 
     ui.initUiState(
         &queues,
-        sound_file_info
+        sound_file_info,
+        path
     );
 
     ui.initWindow();
